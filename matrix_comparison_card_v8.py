@@ -16,7 +16,7 @@ import time
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler, build_opener
 
-from matrix_v7 import icw_conflict_links, unconfirmed_ipk_page
+from matrix_v7 import METRIC_CSS, icw_conflict_links, metric_explanation, unconfirmed_ipk_page
 
 ROOT = Path("/opt/piton-catalog-intelligence")
 WEB = ROOT / "web.py"
@@ -117,6 +117,9 @@ section { margin-top: 18px; }
 """
 
 
+CSS += METRIC_CSS
+
+
 def paired(row):
     return all(any(detail.get(vendor) for detail in row["details"]) for vendor in ("piton", "graziadio"))
 
@@ -187,7 +190,7 @@ def card_parameter_row(detail):
         verdict = "Сверка"
         qualifier = ' data-icw-conflict="true"'
     return (
-        f'<tr{qualifier}><th scope="row">{LABELS[detail["code"]]}</th>'
+        f'<tr{qualifier}><th scope="row">{LABELS[detail["code"]]}{metric_explanation(detail["code"])}</th>'
         f'<td>{piton}</td><td>{display_value(detail["graziadio"])}</td><td>{verdict}</td></tr>'
     )
 
