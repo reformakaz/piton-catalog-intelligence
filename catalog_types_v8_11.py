@@ -402,6 +402,13 @@ def get(handler, db):
         else:
             legrand_page(handler, db)
         return True
+    if path == "/matrix-v7" and getattr(handler, "catalog_manager", False):
+        rows = matrix_v7.matrix(db)["rows"] if legacy_pair(db) else []
+        html = card.manager_comparison(
+            rows, param(handler, "position"), param(handler, "material"), matrix_v7.matrix_tab
+        )
+        handler.send(200, html.encode("utf-8"), "text/html; charset=utf-8")
+        return True
     if legacy_pair(db):
         if path != "/matrix-v7":
             return False
