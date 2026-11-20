@@ -16,7 +16,10 @@ import time
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler, build_opener
 
-from matrix_v7 import METRIC_CSS, icw_conflict_links, metric_explanation, unconfirmed_ipk_page
+from matrix_v7 import (
+    METRIC_CSS, comparison_note_markup, electrical_badge, icw_conflict_links,
+    metric_highlight, unconfirmed_ipk_page,
+)
 
 ROOT = Path("/opt/piton-catalog-intelligence")
 WEB = ROOT / "web.py"
@@ -164,34 +167,23 @@ def needs_review(entry):
     return bool(entry and str(entry.get("status") or "").lower() in REVIEW_STATUSES)
 
 
-def result_label(detail):
-    verdict = detail["verdict"]
-    if verdict in ("piton", "graziadio"):
-        vendor = "PitON" if verdict == "piton" else "Graziadio"
-        relation = "Ниже" if detail["code"] == "r20_mohm_m" else "Выше"
-        return f"{relation} у {vendor}"
-    return {"equal": "Совпадает", "missing": "Нет пары", "different": "Уточнить"}[verdict]
-
-
 def card_parameter_row(detail):
     page = unconfirmed_ipk_page(detail)
-    piton = display_value(detail["piton"])
-    verdict = result_label(detail)
+    piton = metric_highlight(display_value(detail["piton"]), electrical_badge(detail, "piton"))
+    graziadio = metric_highlight(display_value(detail["graziadio"]), electrical_badge(detail, "graziadio"))
     qualifier = ""
     if page:
         value = f'{detail["piton"]["value"]:g}'.replace(".", ",")
         piton = f'{value} · <a href="{PITON_PDF}#page={page}">единица требует сверки</a>'
-        verdict = "Уточнить единицу PitON"
         qualifier = ' data-ipk-unit="unconfirmed"'
     if detail.get("comparison_source"):
         piton += f' · <a href="{escape(detail["comparison_source"])}">Каталог EN</a>'
     if detail.get("comparison_conflict"):
         piton = icw_conflict_links(detail["comparison_conflict"])
-        verdict = "Сверка"
         qualifier = ' data-icw-conflict="true"'
     return (
-        f'<tr{qualifier}><th scope="row">{LABELS[detail["code"]]}{metric_explanation(detail["code"])}</th>'
-        f'<td>{piton}</td><td>{display_value(detail["graziadio"])}</td><td>{verdict}</td></tr>'
+        f'<tr{qualifier}><th scope="row">{LABELS[detail["code"]]}{comparison_note_markup(detail)}</th>'
+        f'<td>{piton}</td><td>{graziadio}</td></tr>'
     )
 
 
@@ -275,8 +267,8 @@ def card(row):
 <body><main><nav><a href="?material={material}">← К матрице</a><span>Печать или PDF · Ctrl+P</span></nav>
 <header><p class="eyebrow">Карточка сравнения шинопроводов</p>
 <h1>PitON E3 / Graziadio ISOLSBARRA</h1><p class="variant">{MATERIALS[material]} ({material}), {rating} А</p></header>
-{note}<div class="scroll"><table>
-<thead><tr><th>Параметр</th><th>PitON E3</th><th>Graziadio ISOLSBARRA</th><th>Сравнение</th></tr></thead>
+{note}<div class="scroll"><table class="catalog-comparison-table">
+<thead><tr><th>Параметр</th><th>PitON E3</th><th>Graziadio ISOLSBARRA</th></tr></thead>
 <tbody>{table}</tbody></table></div>
 {comparison_summary(row)}
 {comparison_markup(material, row['rating_a'], row.get('phase_geometry', {}))}

@@ -2,6 +2,7 @@
 from html import escape
 from math import isfinite
 import catalog_phase_conductor_v8_11_10 as phase
+from matrix_v7 import metric_highlight
 
 PITON = ("piton", "PitON E3")
 GRAZIADIO = ("graziadio", "Graziadio ISOLSBARRA")
@@ -34,6 +35,8 @@ GRAZIADIO_TABLES = (
 )
 PITON_VARIANT = "Прямая секция, 3L+N+PE"
 GRAZIADIO_VARIANT = "Прямая секция, 3P+N(P)+PE, стандартное исполнение без дополнительного кожуха"
+COMPOUND_INSULATION = "Бесшовная компаундная, класс C"
+PVC_INSULATION = "Индивидуальная оболочка из ПВХ"
 
 
 def make_variant(identity, material, rating, width, height, mass, variant, insulation, technical_source, insulation_source):
@@ -59,7 +62,7 @@ def build_variants():
         for rating, height, mass in table:
             variants[(PITON, material, rating)] = make_variant(
                 PITON, material, rating, 125, height, mass, PITON_VARIANT,
-                "Бесшовная компаундная, класс C", technical_ref, insulation_ref
+                COMPOUND_INSULATION, technical_ref, insulation_ref
             )
     for material, leaf, table in GRAZIADIO_TABLES:
         technical_ref = (f"Graziadio ISOLSBARRA, стр. {leaf} каталога", f"{GRAZIADIO_PDF}#page=3")
@@ -67,7 +70,7 @@ def build_variants():
         for rating, count, mass in table:
             entries = make_variant(
                 GRAZIADIO, material, rating, GRAZIADIO_WIDTH[count], 120, mass, GRAZIADIO_VARIANT,
-                "Индивидуальная оболочка из ПВХ", technical_ref, insulation_ref
+                PVC_INSULATION, technical_ref, insulation_ref
             )
             if rating == 6300:
                 entries["dimensions_mm"]["variant_note"] = "N = 3000 мм² по сноске"
@@ -112,7 +115,7 @@ def section_area(entry):
     return {"value": area, "unit": "мм²"} if area > 0 else None
 
 
-def comparison_row(label, left, right, highlight=None):
+def comparison_row(label, left, right, highlight=None, prefer_compound=False):
     def valid(entry, unit):
         return (
             entry and entry["unit"] == unit and type(entry["value"]) in (int, float)
@@ -125,7 +128,10 @@ def comparison_row(label, left, right, highlight=None):
         if valid(left, unit) and valid(right, unit) and left["value"] != right["value"]:
             first = left["value"] > right["value"] if label_short == "больше" else left["value"] < right["value"]
             selected = 0 if first else 1
-            display[selected] = f'<span class="metric-highlight">{display[selected]}<small>{label_short}</small></span>'
+            display[selected] = metric_highlight(display[selected], label_short)
+    if prefer_compound and left and right and {left["value"], right["value"]} == {COMPOUND_INSULATION, PVC_INSULATION}:
+        selected = 0 if left["value"] == COMPOUND_INSULATION else 1
+        display[selected] = metric_highlight(display[selected], "предпочтительнее")
     return f'<tr><th scope="row">{escape(label)}</th><td>{display[0]}</td><td>{display[1]}</td></tr>'
 
 
@@ -146,7 +152,7 @@ def comparison_markup(material, rating, phase_geometry):
             ))
         else:
             highlight = {"phase_area_mm2": ("больше", "мм²"), "mass_kg_m": ("меньше", "кг/м")}.get(code)
-            built_rows.append(comparison_row(label, left, right, highlight))
+            built_rows.append(comparison_row(label, left, right, highlight, prefer_compound=code == "insulation_type"))
     rows = "".join(built_rows)
     notes = "".join(
         f'<li><strong>{escape(entries["dimensions_mm"]["product"])}</strong> · '
@@ -164,7 +170,7 @@ def comparison_markup(material, rating, phase_geometry):
     )
     return (
         '<section class="construction-details"><h2>Габариты, масса и изоляция</h2>'
-        '<div class="scroll"><table><thead><tr><th>Параметр</th><th>PitON E3</th>'
+        '<div class="scroll"><table class="catalog-comparison-table"><thead><tr><th>Параметр</th><th>PitON E3</th>'
         f'<th>Graziadio ISOLSBARRA</th></tr></thead><tbody>{rows}</tbody></table></div>'
         f'<ul class="source">{notes}{phase_sources}</ul></section>'
     )
