@@ -6,6 +6,8 @@ import shutil
 import subprocess
 
 import spec_import
+import catalog_physical_v8_11_9 as physical
+import catalog_phase_conductor_v8_11_10 as phase
 
 TABLE_TERMS = re.compile(
     r"\b(?:icw|ipk|r20|ui|impedance|withstand|insulation voltage|technical characteristics|short.circuit)\b"
@@ -18,6 +20,10 @@ LABEL_SIGNATURES = {
     "icw_1s_ka": re.compile(r"\bicw\b|short.time|термическ", re.I),
     "ipk_ka": re.compile(r"\bipk\b|peak current|пиков|динамическ", re.I),
     "r20_mohm_m": re.compile(r"\br20\b|phase resistance|сопротивлен", re.I),
+    "dimensions_mm": re.compile(r"overall dimensions?.*busbar|busway dimensions?|габарит.*секци", re.I),
+    "phase_area_mm2": re.compile(r"(?:cross.section.*(?:phase|conductor)|(?:phase|conductor).*cross.section|сечение.*фаз)", re.I),
+    "mass_kg_m": re.compile(r"\bweight\b|linear mass|масса|вес", re.I),
+    "insulation_type": re.compile(r"insulation material|type of insulation|тип изоляции|материал изоляции", re.I),
 }
 NUM_TOKEN = re.compile(r"(?<![\d.,])\d+(?:[.,]\d+)?(?![\d.,])")
 def raster(page, pixels):
@@ -122,6 +128,39 @@ def material_on_page(text):
     return "Cu" if copper else "Al"
 
 
+PARAMETER_UNITS = {code: envelope[0] for code, envelope in spec_import.PARAMS.items()} | physical.IMPORT_UNITS | {"phase_area_mm2":"мм²"}
+UNIT_PATTERN = {
+    "r20_mohm_m": r"m\s*[ωΩ]\s*/\s*m|мОм\s*/\s*м",
+    "dimensions_mm": r"mm|мм",
+    "phase_area_mm2": r"(?:mm|мм)\s*(?:²|2|\^2)",
+    "mass_kg_m": r"(?:kg|кг)\s*/\s*(?:m|м)",
+}
+INSULATION = re.compile(r"\b(?:PVC|ПВХ|cast resin|epoxy resin|polyester|polyethylene|mica|компаунд\w*|эпоксидная смола|поливинилхлорид)\b|[-–—]+",re.I)
+
+
+def literal_value(code, raw):
+    if code in physical.IMPORT_UNITS:
+        return physical.import_value(code,raw)
+    if code == "phase_area_mm2":
+        return phase.number(raw)
+    if not re.fullmatch(r"\d+(?:[.,]\d+)?",raw.strip()):
+        raise ValueError("Ожидалось число из таблицы.")
+    value=float(raw.replace(",","."))
+    _,lo,hi=spec_import.PARAMS[code]
+    if not lo <= value <= hi:
+        raise ValueError("Числовое значение вне допустимого диапазона.")
+    return value
+
+
+def literal_unit(code, unit):
+    unit = unit.strip()
+    if code == "insulation_type":
+        return not unit
+    expres = UNIT_PATTERN.get(code,re.escape(PARAMETER_UNITS[code]))
+    suffix = r"(?:\s*rms)?" if code=="icw_1s_ka" else ""
+    return re.fullmatch(r"(?:"+expres+r")"+suffix,unit,re.I) is not None
+
+
 def row_cells(line, code, unit, count):
     if EXCLUDED_ROW.search(line) or not LABEL_SIGNATURES[code].search(line):
         return ()
@@ -129,16 +168,30 @@ def row_cells(line, code, unit, count):
         return ()
     if code == "r20_mohm_m" and not re.search(r"(?<!\d)20\s*°?\s*[cс]\b",line,re.I):
         return ()
-    symbol = r"m\s*[ωΩ]\s*/\s*m" if code == "r20_mohm_m" else re.escape(unit)
-    unit_match = re.search(r"(?<![a-z])" + symbol + r"(?![a-z])",line,re.I)
-    if not unit_match:
-        return ()
-    tail = line[unit_match.end():]
-    # Reject split ratings, text placeholders and missing columns. A dash is not a number.
-    tokens = re.findall(r"\d+(?:[.,]\d+)?|[-–—]+", tail)
+    if code == "insulation_type":
+        if re.search(r"thermal resistance|insulation class|класс",line,re.I):
+            return ()
+        tail = line[LABEL_SIGNATURES[code].search(line).end():]
+        tokens = INSULATION.findall(tail)
+    else:
+        symbol = UNIT_PATTERN.get(code,re.escape(unit))
+        unit_match = re.search(r"(?<![a-z])(?:"+symbol+r")(?![a-z])",line,re.I)
+        if not unit_match:
+            return ()
+        tail = line[unit_match.end():]
+        if code == "dimensions_mm":
+            tokens = re.findall(r"\d+\s*[×xх]\s*\([^)]*\)|\d+\s*[×xх]\s*\d+|[-–—]+",tail)
+        else:
+            tokens = re.findall(r"\d+\s*[×xх]\s*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?|[-–—]+",tail)
     if len(tokens)!=count:
         return ()
-    return tuple(float(v.replace(",",".")) if v[0].isdigit() else None for v in tokens)
+    cells=[]
+    for token in tokens:
+        try:
+            cells.append(None if re.fullmatch(r"[-–—]+",token) else literal_value(code,token))
+        except ValueError:
+            cells.append(None)
+    return tuple(cells)
 
 
 def known_variants(text):
@@ -160,10 +213,10 @@ def table_drafts(pages, vendor, product, title):
             continue
         for line in text.splitlines():
             for code in LABEL_SIGNATURES:
-                unit,lo,hi=spec_import.PARAMS[code]
+                unit=PARAMETER_UNITS[code]
                 cells = row_cells(line,code,unit,len(ratings))
                 for rating,value in zip(ratings,cells):
-                    if value is None or not lo <= value <= hi:
+                    if value is None:
                         continue
                     key=(material,rating,code)
                     if key in drafts:
