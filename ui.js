@@ -1,7 +1,28 @@
 const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api = path => location.pathname === '/catalog/' ? '/catalog' + path : path;
 async function req(path,options){const r=await fetch(api(path),options);const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}
-for(const b of document.querySelectorAll('[data-tab]'))b.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));for(const id of ['compare','library','importer','extractor'])$('#'+id).classList.toggle('hidden',id!==b.dataset.tab);if(b.dataset.tab==='library')load();if(b.dataset.tab==='extractor')loadExtractDocs()});
+const tabs = document.querySelectorAll('[data-tab]');
+for (const tab of tabs) {
+  tab.addEventListener('click', event => {
+    if (tab.tagName === 'A') {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      history.replaceState(null, '', tab.href);
+    }
+    for (const button of tabs) {
+      button.classList.toggle('active', button === tab);
+      if (button.tagName === 'A') {
+        if (button === tab) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      }
+    }
+    for (const id of ['compare', 'library', 'importer', 'extractor']) {
+      $('#' + id).classList.toggle('hidden', id !== tab.dataset.tab);
+    }
+    if (tab.dataset.tab === 'library') load();
+    if (tab.dataset.tab === 'extractor') loadExtractDocs();
+  });
+}
 const CATALOG_TYPE_LABELS = {shp:'Шинопровод',tp:'Токопровод'};
 let libraryCatalogues = new Map();
 let editingCatalogue = null;
