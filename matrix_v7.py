@@ -157,7 +157,7 @@ def icw_conflict_links(conflict):
 
 
 def matrix(db,material='all'):
- from catalog_phase_conductor_v8_11_10 import pairs
+ from catalog_physical_v8_11_9 import pairs
  if material not in ('all','Cu','Al'):raise ValueError('Неверный материал')
  with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True,timeout=10) as c:
   c.row_factory=sqlite3.Row
