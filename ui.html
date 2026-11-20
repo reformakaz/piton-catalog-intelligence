@@ -177,6 +177,11 @@ html:not(.catalog-workspace) main:has(> #library:not(.hidden)){max-width:none}
         <a id="characteristics-phase-template">Шаблон сечения и размеров шины</a>
       </div>
     </div>
+    <details id="characteristics-pdf-pages">
+      <summary>Страницы с таблицами</summary>
+      <label for="characteristics-pages">Страница или диапазон, например 4-9</label>
+      <input id="characteristics-pages" class="characteristics-document" placeholder="Весь документ" maxlength="16">
+    </details>
     <div class="characteristics-actions"><button id="characteristics-prepare" type="button">Загрузить и распознать</button><button id="characteristics-use-csv" class="characteristics-secondary" type="button" hidden>Импортировать из CSV</button></div>
   </section>
   <section id="characteristics-review" class="characteristics-step" hidden>
