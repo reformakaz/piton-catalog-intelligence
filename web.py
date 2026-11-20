@@ -2,6 +2,7 @@
 """Catalog Intelligence v2: localhost-only library and evidence-backed demo reports."""
 import hashlib,html,json,mimetypes,os,pathlib,re,sqlite3,subprocess,sys,urllib.parse,uuid
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+import catalog_workspace
 ROOT=pathlib.Path(__file__).resolve().parent
 DB=ROOT/'catalogs.sqlite3'; DOCS=ROOT/'catalogs'; REPORTS=ROOT/'reports'
 UI=(ROOT/'ui.html').read_bytes() if (ROOT/'ui.html').exists() else b''
@@ -18,6 +19,8 @@ def jdata(obj):return json.dumps(obj,ensure_ascii=False).encode()
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,fmt,*args):sys.stderr.write('[catalog] '+fmt%args+'\n')
  def send(self,code,body=b'',ctype='application/json; charset=utf-8',headers=None):
+  if getattr(self,'catalog_public',False) and code==200 and ctype.startswith('text/html'):
+   body=catalog_workspace.public_html(self,body)
   self.send_response(code);self.send_header('Content-Type',ctype);self.send_header('Content-Length',str(len(body)))
   # PITON_CATALOG_REPORT_PREVIEW_FIX_V1: only same-origin report HTML may be framed.
   report_preview = (urllib.parse.urlsplit(self.path).path.startswith('/api/reports/')
@@ -37,7 +40,8 @@ class Handler(BaseHTTPRequestHandler):
   if not 0<size<=MAX_UPLOAD:raise ValueError('Недопустимый размер файла (максимум 80 МБ)')
   return self.rfile.read(size)
  def do_GET(self):
-  try:self.get()
+  try:
+   if catalog_workspace.public_route(self):self.get()
   except (ValueError,KeyError) as e:self.fail(400,str(e))
   except Exception as e:self.fail(500,'Ошибка сервера: '+type(e).__name__)
  def get(self):
@@ -107,7 +111,8 @@ class Handler(BaseHTTPRequestHandler):
   if path=='/ui.js':return self.send(200,(ROOT/'ui.js').read_bytes(),'text/javascript; charset=utf-8')
   self.fail(404,'Не найдено')
  def do_POST(self):
-  try:self.post()
+  try:
+   if catalog_workspace.public_route(self):self.post()
   except (ValueError,KeyError) as e:self.fail(400,str(e))
   except Exception as e:
    self.log_message('error: %s',repr(e));self.fail(500,'Ошибка сервера: '+type(e).__name__)
@@ -115,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
   path=urllib.parse.urlsplit(self.path).path
   # Loopback only; require same-origin browser requests for modifications.
   origin=self.headers.get('Origin','')
-  if origin and origin not in ('http://127.0.0.1:8137','http://localhost:8137'):
+  if not getattr(self,'catalog_public',False) and origin and origin not in ('http://127.0.0.1:8137','http://localhost:8137'):
    return self.fail(403,'Недопустимый Origin')
   if path=='/api/catalog-type':
    from catalog_types_v8_11 import set_existing_type
@@ -164,7 +169,8 @@ class Handler(BaseHTTPRequestHandler):
    if material not in ('Cu','Al') or not 400<=rating<=7500:raise ValueError('Недопустимый материал или номинал')
    target=REPORTS/f'comparison_{material}_{rating}.html';REPORTS.mkdir(exist_ok=True)
    subprocess.run([sys.executable,str(ROOT/'catalog_engine.py'),'report','--material',material,'--rating',str(rating),'--out',str(target)],check=True,timeout=20,capture_output=True)
-   return self.send(200,jdata({'ok':True,'basename':target.stem,'links':{ext:'/api/reports/'+target.stem+'.'+ext for ext in ('html','csv','json')}}))
+   prefix=catalog_workspace.MOUNT.rstrip('/') if getattr(self,'catalog_public',False) else ''
+   return self.send(200,jdata({'ok':True,'basename':target.stem,'links':{ext:prefix+'/api/reports/'+target.stem+'.'+ext for ext in ('html','csv','json')}}))
   self.fail(404,'Не найдено')
 
 def main():
