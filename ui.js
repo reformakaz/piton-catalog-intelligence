@@ -1,5 +1,6 @@
 const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function req(path,options){const r=await fetch(path,options);const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}
+const api = path => location.pathname === '/catalog/' ? '/catalog' + path : path;
+async function req(path,options){const r=await fetch(api(path),options);const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}
 for(const b of document.querySelectorAll('[data-tab]'))b.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));for(const id of ['compare','library','importer','extractor'])$('#'+id).classList.toggle('hidden',id!==b.dataset.tab);if(b.dataset.tab==='library')load();if(b.dataset.tab==='extractor')loadExtractDocs()});
 const CATALOG_TYPE_LABELS = {shp:'Шинопровод',tp:'Токопровод'};
 let libraryCatalogues = new Map();
@@ -80,7 +81,7 @@ async function load() {
       return '<tr><td><strong>'+esc(doc.title || id)+'</strong><br><small>'+esc(doc.created_at || '')+
         '</small></td><td>'+esc(type)+'</td><td>'+esc(doc.pages)+'</td><td>'+esc(doc.text_pages)+' / '+
         esc(doc.pages)+'</td><td><div class="catalog-row-actions">'+
-        '<a class="catalog-secondary" target="_blank" rel="noopener noreferrer" href="/api/pdf/'+encodeURIComponent(id)+'">Открыть PDF ↗</a>'+
+        '<a class="catalog-secondary" target="_blank" rel="noopener noreferrer" href="'+api('/api/pdf/'+encodeURIComponent(id))+'">Открыть PDF ↗</a>'+
         '<button type="button" class="catalog-secondary" data-catalog-specs="'+esc(id)+
         '" aria-expanded="false" aria-label="Характеристики '+esc(doc.title || id)+'">Характеристики</button>'+
         '<button type="button" class="catalog-secondary" data-catalog-edit="'+esc(id)+
@@ -316,7 +317,10 @@ $('#catalog-editor-form').addEventListener('submit',async event => {
 
 $('#run').addEventListener('click',async()=>{const b=$('#run');b.disabled=true;$('#compareStatus').textContent='Формирование отчёта…';try{const d=await req('/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({material:$('#material').value,rating:Number($('#rating').value)})});$('#download').innerHTML=Object.entries(d.links).map(([ext,url])=>`<a href="${url}" ${ext==='html'?'target="_blank" rel="noopener noreferrer"':'download'}>${ext.toUpperCase()} ↗</a>`).join('');$('#preview').src=d.links.html;$('#results').classList.remove('hidden');$('#compareStatus').textContent='Отчёт готов. Отсутствующие данные обозначены отдельно.';}catch(e){$('#compareStatus').textContent='Ошибка: '+e.message}finally{b.disabled=false}});
 $('#upload').addEventListener('click',async()=>{const file=$('#file').files[0],vendor=$('#vendor').value.trim(),title=$('#title').value.trim();const catalog_type=$('#catalog-type').value;if(!file||!title||!vendor||!catalog_type){$('#uploadStatus').textContent='Укажите тип, производителя, название и PDF';return}const btn=$('#upload');btn.disabled=true;$('#uploadStatus').textContent='Загрузка и индексация…';try{const q=new URLSearchParams({vendor,title,catalog_type});const d=await req('/api/upload?'+q,{method:'POST',headers:{'Content-Type':'application/pdf'},body:file});$('#uploadStatus').textContent=`Загружено: ${d.pages} страниц, текстовый слой на ${d.text_pages}. Параметры автоматически не извлечены.`;$('#file').value='';await load()}catch(e){$('#uploadStatus').textContent='Ошибка: '+e.message}finally{btn.disabled=false}});
-load();
+const initialSection = new URLSearchParams(location.search).get('workspace');
+const initialTab = Array.from(document.querySelectorAll('[data-tab]')).find(button => button.dataset.tab === initialSection);
+if (initialTab) initialTab.click();
+if (initialSection !== 'library') load();
 
 let validatedBytes=null;
 $('#specfile').addEventListener('change',()=>{validatedBytes=null;$('#specApply').disabled=true;$('#specStatus').textContent='CSV выбран. Нажмите «Проверить CSV».'});
@@ -326,7 +330,7 @@ $('#specApply').addEventListener('click',async()=>{if(!validatedBytes)return;con
 // PITON_CATALOG_EXTRACT_V4 — preview and explicit CSV review before commit.
 let proposed=[], approvedBytes=null;
 async function loadExtractDocs(){const d=await req('/api/library');$('#extractDoc').innerHTML=d.documents.map(x=>`<option value="${esc(x.id)}">${esc(x.title||x.id)} (${esc(x.pages)} стр.)</option>`).join('')}
-$('#extractStart').addEventListener('click',async()=>{approvedBytes=null;$('#extractActions').classList.add('hidden');$('#extractStatus').textContent='Анализ PDF…';try{let d=await req('/api/extract-v4?document='+encodeURIComponent($('#extractDoc').value));proposed=d.proposals;$('#extractStatus').textContent=`Найдено ${proposed.length} значений; таблиц: ${d.tables.length}. ${d.scan_note}`;if(proposed.length){$('#extractRows').innerHTML=proposed.map((x,i)=>`<tr><td><input type="checkbox" class="extractPick" data-i="${i}" checked></td><td>${esc(x.material)}</td><td>${esc(x.rating_a)} А</td><td>${esc(x.parameter)}</td><td>${esc(x.value)} ${esc(x.unit)}</td><td><a href="/api/pdf/${encodeURIComponent(d.document.id)}#page=${x.page}" target="_blank" rel="noopener">PDF стр. ${x.page} ↗</a></td></tr>`).join('');$('#extractActions').classList.remove('hidden')}}catch(e){$('#extractStatus').textContent='Ошибка: '+e.message}});
+$('#extractStart').addEventListener('click',async()=>{approvedBytes=null;$('#extractActions').classList.add('hidden');$('#extractStatus').textContent='Анализ PDF…';try{let d=await req('/api/extract-v4?document='+encodeURIComponent($('#extractDoc').value));proposed=d.proposals;$('#extractStatus').textContent=`Найдено ${proposed.length} значений; таблиц: ${d.tables.length}. ${d.scan_note}`;if(proposed.length){$('#extractRows').innerHTML=proposed.map((x,i)=>`<tr><td><input type="checkbox" class="extractPick" data-i="${i}" checked></td><td>${esc(x.material)}</td><td>${esc(x.rating_a)} А</td><td>${esc(x.parameter)}</td><td>${esc(x.value)} ${esc(x.unit)}</td><td><a href="${api('/api/pdf/'+encodeURIComponent(d.document.id))}#page=${x.page}" target="_blank" rel="noopener">PDF стр. ${x.page} ↗</a></td></tr>`).join('');$('#extractActions').classList.remove('hidden')}}catch(e){$('#extractStatus').textContent='Ошибка: '+e.message}});
 $('#extractAll').addEventListener('change',e=>{document.querySelectorAll('.extractPick').forEach(x=>x.checked=e.target.checked);approvedBytes=null;$('#extractApply').disabled=true});
 $('#extractRows').addEventListener('change',()=>{approvedBytes=null;$('#extractApply').disabled=true});
 // PITON_OCR_EDITABLE_V5_3: the visible user-verified value is the only value imported.
@@ -370,7 +374,7 @@ $('#scanStart').addEventListener('click',async()=>{
       status:'manual_review',page:miss.page,manual:true});
   }
   if(proposed.length){
-   $('#extractRows').innerHTML=proposed.map((x,i)=>`<tr data-ocr-row="${i}"><td><input type="checkbox" class="extractPick" data-i="${i}"></td><td>${esc(x.material)}</td><td>${esc(x.rating_a)} А</td><td>${esc(x.parameter)}</td><td><input class="ocrValue" type="text" inputmode="decimal" aria-label="${esc(x.parameter)} ${esc(x.rating_a)} А" value="${x.value===null?'':esc(x.value)}" placeholder="Сверьте с PDF" style="min-width:110px;width:130px;${x.manual?'border-color:#cc8530;background:#fff7e6;':''}"> ${esc(x.unit)}${x.manual?' <small style="color:#996316">пропущено OCR</small>':''}</td><td><a href="/api/pdf/${encodeURIComponent(d.document.id)}#page=${x.page}" target="_blank" rel="noopener">PDF стр. ${x.page} ↗</a></td></tr>`).join('');
+   $('#extractRows').innerHTML=proposed.map((x,i)=>`<tr data-ocr-row="${i}"><td><input type="checkbox" class="extractPick" data-i="${i}"></td><td>${esc(x.material)}</td><td>${esc(x.rating_a)} А</td><td>${esc(x.parameter)}</td><td><input class="ocrValue" type="text" inputmode="decimal" aria-label="${esc(x.parameter)} ${esc(x.rating_a)} А" value="${x.value===null?'':esc(x.value)}" placeholder="Сверьте с PDF" style="min-width:110px;width:130px;${x.manual?'border-color:#cc8530;background:#fff7e6;':''}"> ${esc(x.unit)}${x.manual?' <small style="color:#996316">пропущено OCR</small>':''}</td><td><a href="${api('/api/pdf/'+encodeURIComponent(d.document.id))}#page=${x.page}" target="_blank" rel="noopener">PDF стр. ${x.page} ↗</a></td></tr>`).join('');
    $('#extractAll').checked=false;$('#extractActions').classList.remove('hidden');
    $('#extractStatus').textContent+=` Показано ${proposed.length} строк, включая пустые для исправления. Все флажки сняты.`;
   }
