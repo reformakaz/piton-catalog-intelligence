@@ -9,6 +9,7 @@ import sqlite3
 from contextlib import closing
 
 import catalog_phase_conductor_v8_11_10 as phase
+import catalog_physical_v8_11_9 as physical
 import catalog_types_v8_11 as types
 import spec_import
 from catalog_engine import PITON_PRODUCTS
@@ -101,6 +102,11 @@ def normalize(raw, vendor, product, allow_missing):
                 raise ValueError(f"Строка {index}: неверная единица измерения.")
             value = phase.number(str(value))
             status = "source_document"
+        elif param in physical.IMPORT_UNITS:
+            if unit != physical.IMPORT_UNITS[param] or not re.search(r"(?:стр\.?|page|p\.|PDF|лист)",source,re.I):
+                raise ValueError(f"Строка {index}: проверьте единицу измерения и страницу каталога.")
+            value = physical.import_value(param, value)
+            status = "manual_review"
         elif param in spec_import.PARAMS:
             expected, lo, hi = spec_import.PARAMS[param]
             if (unit != expected or not 400 <= key[1] <= 7500
@@ -133,6 +139,7 @@ def reviewed(conn, rows):
         )
     }
     phase_existing = phase.PUBLISHED | phase.stored_rows(conn)
+    imported = physical.stored_variants(conn)
     result = []
     for row in rows:
         material, rating, code = (row[k] for k in ("material", "rating_a", "parameter"))
@@ -140,6 +147,10 @@ def reviewed(conn, rows):
         if code in PHASE_FIELDS:
             saved = phase_existing.get((vendor, product, material, rating, code))
             other = (product, saved[0], row["unit"], saved[1], "") if saved else None
+        elif code in physical.IMPORT_UNITS:
+            key = ((vendor, product), material, rating)
+            value = imported.get(key, {}).get(code) or physical.VARIANTS.get(key, {}).get(code)
+            other = (product,value["value"],value["unit"],value["source"],value["status"]) if value else None
         foreign = other and identity(vendor, other[0]) != identity(vendor, product)
         if foreign:
             state = "conflict"
@@ -155,13 +166,25 @@ def reviewed(conn, rows):
 
 
 def write(conn, rows):
-    electrical = [r for r in rows if r["parameter"] not in PHASE_FIELDS]
+    electrical = [r for r in rows if r["parameter"] in spec_import.PARAMS]
     conn.executemany(
         """INSERT INTO specs(vendor,product,material,rating_a,parameter,value,unit,source,status)
         VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(vendor,material,rating_a,parameter)
         DO UPDATE SET value=excluded.value,unit=excluded.unit,source=excluded.source,status=excluded.status""",
         (tuple(row[key] for key in FIELDS) for row in electrical),
     )
+    construction = [row for row in rows if row["parameter"] in physical.IMPORT_UNITS]
+    if construction:
+        conn.execute("""CREATE TABLE IF NOT EXISTS catalog_physical_specs (
+            vendor TEXT NOT NULL,product TEXT NOT NULL,material TEXT NOT NULL,rating_a INTEGER NOT NULL,
+            parameter TEXT NOT NULL,value TEXT NOT NULL,unit TEXT NOT NULL,source TEXT NOT NULL,status TEXT NOT NULL,
+            PRIMARY KEY(vendor,product,material,rating_a,parameter))""")
+        conn.executemany(
+            """INSERT INTO catalog_physical_specs(vendor,product,material,rating_a,parameter,value,unit,source,status)
+            VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(vendor,product,material,rating_a,parameter)
+            DO UPDATE SET value=excluded.value,unit=excluded.unit,source=excluded.source,status=excluded.status""",
+            (tuple(row[key] for key in FIELDS) for row in construction),
+        )
     dimensions = [r for r in rows if r["parameter"] in PHASE_FIELDS]
     if dimensions:
         conn.execute("""CREATE TABLE IF NOT EXISTS catalog_phase_specs (
@@ -205,9 +228,16 @@ def review(handler, db):
                 rows = extract(Path(db).resolve().parent, filename, title, vendor, product, pages)
             else:
                 rows = rows_from_pdf(document, vendor, product, checksum, pages=pages)
-                if not rows:
-                    from catalog_pdf_ocr import extract
-                    rows = extract(Path(db).resolve().parent, filename, title, vendor, product, pages)
+                from catalog_pdf_ocr import extract
+                try:
+                    supplemental = extract(Path(db).resolve().parent, filename, title, vendor, product, pages)
+                except ValueError:
+                    if not rows:
+                        raise
+                    supplemental = []
+                existing = {(row["material"],row["rating_a"],row["parameter"]) for row in rows}
+                rows.extend(row for row in supplemental
+                            if (row["material"],row["rating_a"],row["parameter"]) not in existing)
             if not rows:
                 raise ValueError("Не нашлось значений с подтверждёнными строками источника. Проверьте страницы и исполнение.")
         elif action == "csv":
