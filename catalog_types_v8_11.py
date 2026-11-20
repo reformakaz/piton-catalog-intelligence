@@ -9,14 +9,15 @@ from unicodedata import normalize
 from urllib.parse import urlsplit
 
 import catalog_series_v8_9 as series
+from catalog_engine import COMPARISON_PRODUCTS, GRAZIADIO_PRODUCT, PITON_PRODUCTS
 import matrix_comparison_card_v8 as card
 import matrix_v7
 import catalog_physical_v8_11_9 as physical
 import catalog_phase_conductor_v8_11_10 as phase
 
 LABELS = {"shp": "Шинопровод", "tp": "Токопровод"}
-PITON = ("piton", "PitON E3")
-GRAZIADIO = ("graziadio", "Graziadio ISOLSBARRA")
+PITON = ("piton", PITON_PRODUCTS[0])
+GRAZIADIO = ("graziadio", GRAZIADIO_PRODUCT)
 LEGRAND = ("legrand", series.PRODUCT)
 FIXED = {PITON: "shp", LEGRAND: "tp"}
 PDF_IDENTITIES = {
@@ -243,7 +244,7 @@ def report_pair(db):
         products = {(row[0], row[1]) for row in conn.execute(
             "SELECT DISTINCT vendor,product FROM specs WHERE vendor IN ('piton','graziadio')"
         )}
-    return products <= {PITON, GRAZIADIO}
+    return products <= COMPARISON_PRODUCTS
 
 
 def page(handler, status, title, body, css=""):

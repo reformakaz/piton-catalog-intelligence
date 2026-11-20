@@ -4,6 +4,11 @@ import argparse, csv, datetime, html, json, pathlib, re, shutil, sqlite3, sys
 ROOT=pathlib.Path(__file__).resolve().parent
 DB=ROOT/'catalogs.sqlite3'
 DOCS=ROOT/'catalogs'
+PITON_PRODUCTS = ('PitON E3', 'PitON Electric E3')
+GRAZIADIO_PRODUCT = 'Graziadio ISOLSBARRA'
+COMPARISON_PRODUCTS = {('piton', product) for product in PITON_PRODUCTS} | {('graziadio', GRAZIADIO_PRODUCT)}
+COMPARISON_FILTER = "((vendor='piton' AND product IN (?, ?)) OR (vendor='graziadio' AND product=?))"
+COMPARISON_FILTER_PARAMS = (*PITON_PRODUCTS, GRAZIADIO_PRODUCT)
 BASE=[
  ('piton','PitON Electric E3','Cu',4000,'nominal_voltage_v',1000,'V','PitON E3, printed p. 61 (PDF p. 63)','manual_review'),
  ('graziadio','Graziadio ISOLSBARRA','Cu',4000,'nominal_voltage_v',1000,'V','Graziadio ISOLSBARRA, technical tables, PDF p. 14','text_verified'),
@@ -38,7 +43,12 @@ def verdict(a,b,key):
  winner=('PitON' if a>b else 'Graziadio') if order=='higher' else ('PitON' if a<b else 'Graziadio')
  return 'Преимущество '+winner if order!='equal' else 'Разные значения'
 def render(material,rating,out):
- c=conn();rows=c.execute('SELECT vendor,parameter,value,unit,source,status FROM specs WHERE material=? AND rating_a=?',(material,rating)).fetchall();docs=c.execute('SELECT id,filename,pages,text_pages FROM documents').fetchall();c.close()
+ c=conn()
+ rows=c.execute(
+  f'SELECT vendor,parameter,value,unit,source,status FROM specs WHERE {COMPARISON_FILTER} AND material=? AND rating_a=?',
+  (*COMPARISON_FILTER_PARAMS,material,rating),
+ ).fetchall()
+ docs=c.execute('SELECT id,filename,pages,text_pages FROM documents').fetchall();c.close()
  index={(r[0],r[1]):r for r in rows};items=[]
  for key,(label,_) in META.items():
   p=index.get(('piton',key));g=index.get(('graziadio',key));a=p[2] if p else None;b=g[2] if g else None
