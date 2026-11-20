@@ -1,6 +1,7 @@
 """Published cross-sections, linear mass and insulation for straight lengths."""
 from html import escape
 from math import isfinite
+import re
 import catalog_phase_conductor_v8_11_10 as phase
 from matrix_v7 import metric_highlight
 
@@ -37,6 +38,54 @@ PITON_VARIANT = "Прямая секция, 3L+N+PE"
 GRAZIADIO_VARIANT = "Прямая секция, 3P+N(P)+PE, стандартное исполнение без дополнительного кожуха"
 COMPOUND_INSULATION = "Бесшовная компаундная, класс C"
 PVC_INSULATION = "Индивидуальная оболочка из ПВХ"
+
+IMPORT_UNITS = {"dimensions_mm": "мм", "mass_kg_m": "кг/м", "insulation_type": ""}
+DIMENSIONS = re.compile(r"([1-9]\d{0,4})\s*[×xх]\s*([1-9]\d{0,4})", re.I)
+
+
+def import_value(code, value):
+    text = str(value).strip()
+    if code == "mass_kg_m":
+        return phase.number(text)
+    if code == "dimensions_mm":
+        result = DIMENSIONS.fullmatch(text)
+        if not result:
+            raise ValueError("Укажите два габарита прямой секции в мм, например 125 × 395.")
+        return " × ".join(result.groups())
+    if not isinstance(value, str) or not 1 <= len(text) <= 140 or any(ord(c) < 32 for c in text):
+        raise ValueError("Укажите тип изоляции как в каталоге.")
+    return text
+
+
+def stored_variants(conn):
+    exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='catalog_physical_specs'").fetchone()
+    variants = {}
+    if exists:
+        for vendor, product, material, amps, code, value, unit, source, status in conn.execute(
+            "SELECT vendor,product,material,rating_a,parameter,value,unit,source,status FROM catalog_physical_specs"
+        ):
+            if code in IMPORT_UNITS:
+                variants.setdefault(((vendor, product), material, amps), {})[code] = dict(
+                    vendor=vendor,product=product,material=material,rating_a=amps,parameter=code,
+                    value=import_value(code,value),unit=unit,source=source,status=status,
+                )
+    return variants
+
+
+def geometry(conn):
+    variants = phase.geometry(conn)
+    for (identity, material, amps), values in stored_variants(conn).items():
+        variants.setdefault((*identity, material, amps), {}).update(values)
+    return variants
+
+
+def pairs(conn):
+    grouped = {}
+    for (vendor, product, material, rating), entries in geometry(conn).items():
+        if (vendor, product) in {PITON, GRAZIADIO}:
+            grouped.setdefault((material, rating), {})[vendor] = entries
+    return grouped
+
 
 
 def make_variant(identity, material, rating, width, height, mass, variant, insulation, technical_source, insulation_source):
@@ -81,11 +130,12 @@ def build_variants():
 VARIANTS = build_variants()
 
 
-def records(phase_variants):
-    return [
-        entry for catalogue in (VARIANTS, phase_variants)
-        for variant in catalogue.values() for entry in variant.values()
-    ]
+def records(variants):
+    combined = {(*identity, material, rating): dict(entries)
+                for (identity, material, rating), entries in VARIANTS.items()}
+    for key, entries in variants.items():
+        combined.setdefault(key, {}).update(entries)
+    return [entry for variant in combined.values() for entry in variant.values()]
 
 
 def render_value(entry):
@@ -115,6 +165,17 @@ def section_area(entry):
     return {"value": area / 100, "unit": "см²"} if area > 0 else None
 
 
+def insulation_family(entry):
+    if not entry:
+        return None
+    value = entry["value"]
+    compound = bool(re.search(r"компаунд|cast resin|epoxy resin|эпоксид",value,re.I))
+    pvc = bool(re.search(r"\bpvc\b|пвх|поливинилхлорид",value,re.I))
+    if compound == pvc:
+        return None
+    return "compound" if compound else "pvc"
+
+
 def comparison_row(label, left, right, highlight=None, prefer_compound=False):
     def valid(entry, unit):
         return (
@@ -129,9 +190,11 @@ def comparison_row(label, left, right, highlight=None, prefer_compound=False):
             first = left["value"] > right["value"] if label_short == "больше" else left["value"] < right["value"]
             selected = 0 if first else 1
             display[selected] = metric_highlight(display[selected], label_short)
-    if prefer_compound and left and right and {left["value"], right["value"]} == {COMPOUND_INSULATION, PVC_INSULATION}:
-        selected = 0 if left["value"] == COMPOUND_INSULATION else 1
-        display[selected] = metric_highlight(display[selected], "предпочтительнее")
+    if prefer_compound:
+        families = [insulation_family(entry) for entry in (left,right)]
+        if set(families) == {"compound","pvc"}:
+            selected = families.index("compound")
+            display[selected] = metric_highlight(display[selected], "предпочтительнее")
     return f'<tr><th scope="row">{escape(label)}</th><td>{display[0]}</td><td>{display[1]}</td></tr>'
 
 
@@ -154,13 +217,17 @@ def comparison_parts(material, rating, phase_geometry):
             highlight = {"phase_area_mm2": ("больше", "мм²"), "mass_kg_m": ("меньше", "кг/м")}.get(code)
             built_rows.append(comparison_row(label, left, right, highlight, prefer_compound=code == "insulation_type"))
     rows = "".join(built_rows)
-    notes = "".join(
-        f'<li><strong>{escape(entries["dimensions_mm"]["product"])}</strong> · '
-        f'{escape(entries["dimensions_mm"]["variant"])}'
-        f'{escape(", " + entries["dimensions_mm"]["variant_note"]) if "variant_note" in entries["dimensions_mm"] else ""}. '
-        f'{evidence(entries["dimensions_mm"])} · {evidence(entries["insulation_type"])}</li>'
-        for entries in (piton, graziadio) if "dimensions_mm" in entries
-    )
+    notes = []
+    for entries in (piton, graziadio):
+        construction = [entry for code, entry in entries.items() if code in IMPORT_UNITS]
+        if not construction:
+            continue
+        product = escape(construction[0]["product"])
+        variant = entries.get("dimensions_mm", {})
+        description = ", ".join(filter(None, (variant.get("variant"), variant.get("variant_note"))))
+        references = " · ".join(dict.fromkeys(evidence(entry) for entry in construction))
+        notes.append(f'<li><strong>{product}</strong> · {escape(description) + ". " if description else ""}{references}</li>')
+    notes = "".join(notes)
     phase_sources = "".join(
         f'<li><strong>{escape(product)} · шина</strong> · '
         + " · ".join(dict.fromkeys(evidence(entry) for code, entry in entries.items() if code in phase.LABELS))
