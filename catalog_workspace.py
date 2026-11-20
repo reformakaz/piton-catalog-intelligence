@@ -26,6 +26,81 @@ html.catalog-workspace{scrollbar-gutter:stable}
 .workspace-tabs a:hover,.workspace-tabs a:focus-visible{color:#007daf;background:#edf5fa}
 @media(max-width:700px){.workspace-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}}
 """
+CATALOG_THEME = """
+@media screen {
+  html[data-catalog-theme]{
+    --catalog-bg:#f0f4f8;--catalog-paper:#fff;--catalog-text:#213547;--catalog-muted:#546878;
+    --catalog-line:#dce6ee;--catalog-soft:#f5f9fc;--catalog-table:#edf5fa;
+    --catalog-link:#006e9c;--catalog-action:#087fac;--catalog-action-hover:#006b93;
+    --catalog-radius:12px;--catalog-inset:28px;
+    background:var(--catalog-bg);color:var(--catalog-text);
+    font:14px/1.55 system-ui,-apple-system,Segoe UI,sans-serif
+  }
+  html[data-catalog-theme] body{margin:0;background:var(--catalog-bg);color:var(--catalog-text);font:inherit}
+  html[data-catalog-theme] a{color:var(--catalog-link);text-underline-offset:3px}
+  html[data-catalog-theme] .muted,html[data-catalog-theme] .eyebrow,
+  html[data-catalog-theme] .variant{color:var(--catalog-muted)}
+  html[data-catalog-theme] :is(.panel,.offer,.total-card){border-color:var(--catalog-line)}
+  html[data-catalog-theme] :is(.offer,.total-card){border-radius:var(--catalog-radius)}
+  html[data-catalog-theme] :is(thead th,.catalog-comparison-table thead th){
+    background:var(--catalog-table);color:var(--catalog-text);font-size:13px
+  }
+  html[data-catalog-theme] :is(td,th,table,.catalogue-picker){border-color:var(--catalog-line)}
+  html[data-catalog-theme] :is(.quote-tech-row > td,.catalogue-picker){background:var(--catalog-soft)}
+  html[data-catalog-theme] :is(.offer summary,.position-catalogue summary,.quote-tech-summary){color:var(--catalog-link)}
+  html[data-catalog-theme] .catalogue-field{color:var(--catalog-text)}
+  html[data-catalog-theme] :is(input:not([type=checkbox]),select,textarea){
+    border-color:#bfd0df;border-radius:7px;color:var(--catalog-text);font:inherit
+  }
+  html[data-catalog-theme] button:not(.secondary):not(.catalog-secondary):not([data-tab]){
+    background:var(--catalog-action);border-color:var(--catalog-action);color:white;border-radius:7px
+  }
+  html[data-catalog-theme] button:not(.secondary):not(.catalog-secondary):not([data-tab]):hover{
+    background:var(--catalog-action-hover);border-color:var(--catalog-action-hover)
+  }
+  html[data-catalog-theme] :is(button.secondary,button.catalog-secondary,.download){
+    background:var(--catalog-paper);border-color:#bfd0df;color:var(--catalog-link)
+  }
+  html[data-catalog-theme] .workspace-tabs a{color:var(--catalog-muted);text-decoration:none}
+  html[data-catalog-theme] .workspace-tabs a[aria-current=page]{color:var(--catalog-link)}
+  html[data-catalog-theme] :is(a,button,input,select,textarea,summary):focus-visible{
+    outline:2px solid var(--catalog-link);outline-offset:2px
+  }
+  html[data-catalog-theme="workspace"] main{width:100%;max-width:none}
+  html[data-catalog-theme="document"] body{padding:var(--catalog-inset)}
+  html[data-catalog-theme="document"] main{
+    box-sizing:border-box;width:100%;max-width:none;margin:0;padding:24px;
+    background:var(--catalog-paper);border:1px solid var(--catalog-line);border-radius:var(--catalog-radius);
+    box-shadow:0 3px 9px #1f354308
+  }
+  html[data-catalog-theme="document"] h1{margin:4px 0 8px;font-size:clamp(23px,3vw,29px);line-height:1.2}
+  html[data-catalog-theme="document"] :is(.summary-cards section,main > section){border-radius:var(--catalog-radius)}
+  html[data-catalog-theme="report"] main{max-width:none;background:var(--catalog-paper);color:var(--catalog-text);box-shadow:none}
+  html[data-catalog-theme="report"] section{background:var(--catalog-soft)}
+}
+@media screen and (max-width:700px){
+  html[data-catalog-theme="document"]{--catalog-inset:12px}
+  html[data-catalog-theme="document"] main{padding:15px}
+}
+"""
+
+
+def themed_html(body, path, view):
+    if path == "/":
+        surface = "workspace"
+    elif path == "/matrix-v7":
+        surface = "workspace" if view in ("", "matrix") else "document"
+    elif path.startswith("/api/reports/"):
+        surface = "report"
+    else:
+        return body
+    text = body.decode("utf-8")
+    if "</style>" not in text:
+        return body
+    text = text.replace("<html ", f'<html data-catalog-theme="{surface}" ', 1)
+    return text.replace("</style>", CATALOG_THEME + "</style>", 1).encode()
+
+
 WORKSPACE_HEADER = (
     '<header class="workspace-header"><h1>PitON '
     '<span style="color:#079cd0">Catalog Intelligence</span></h1></header>'
