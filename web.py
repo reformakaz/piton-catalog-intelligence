@@ -95,12 +95,14 @@ class Handler(BaseHTTPRequestHandler):
   if path=='/api/library':
    import catalog_physical_v8_11_9 as physical
    from catalog_characteristics import variant_specs
+   from catalog_types_v8_11 import archived_documents
    with connection() as c:
     docs=[dict(x) for x in c.execute('SELECT * FROM documents ORDER BY created_at DESC')]
     specs=[dict(x) for x in c.execute('SELECT vendor,product,material,rating_a,parameter,value,unit,source,status FROM specs ORDER BY vendor,material,rating_a')]
     construction=physical.records(physical.geometry(c))
     variants=variant_specs(c)
-   return self.send(200,jdata({'documents':docs,'specs':specs,'physical':construction,'variants':variants,'parameters':{**PARAMS,**physical.LABELS},'note':'Новые PDF индексируются, но их спецификации не распознаются автоматически; у v1 только пилот Cu 4000 A.'}))
+    archived=archived_documents(c)
+   return self.send(200,jdata({'documents':docs,'specs':specs,'physical':construction,'variants':variants,'archived_documents':archived,'parameters':{**PARAMS,**physical.LABELS},'note':'Новые PDF индексируются, но их спецификации не распознаются автоматически; у v1 только пилот Cu 4000 A.'}))
   if path.startswith('/api/pdf/'):
    docid=path.split('/')[-1]
    with connection() as c:r=c.execute('SELECT filename FROM documents WHERE id=?',(docid,)).fetchone()
@@ -132,6 +134,9 @@ class Handler(BaseHTTPRequestHandler):
   if path=='/api/characteristics':
    from catalog_characteristics import review
    return review(self,DB)
+  if path=='/api/catalog-presence':
+   from catalog_types_v8_11 import set_document_presence
+   return set_document_presence(self,DB)
   if path=='/api/catalog-type':
    from catalog_types_v8_11 import set_existing_type
    return set_existing_type(self,DB)
