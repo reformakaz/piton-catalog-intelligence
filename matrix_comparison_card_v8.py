@@ -346,7 +346,7 @@ def manager_comparison(rows, position, material, make_page):
             if row["material"] == metal:
                 current = ' selected' if row is selected else ''
                 rating = f'{row["rating_a"]:,}'.replace(",", " ")
-                options.append(f'<option value="{key}"{current}>{rating} А</option>')
+                options.append(f'<option value="{key}"{current}>{metal} · {rating} А</option>')
         if options:
             groups.append(f'<optgroup label="{label} ({metal})">{"".join(options)}</optgroup>')
     prompt = '<option value="" selected disabled>Выберите номинал</option>' if selected is None else ''
