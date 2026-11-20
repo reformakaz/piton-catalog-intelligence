@@ -107,7 +107,7 @@ READ = {
     "ui.js", "api/library", "api/catalog-types", "api/spec-template", "api/characteristics-template",
     "api/scan-v6", "api/scan-v5", "api/extract-v4",
 }
-WRITE = {"api/characteristics", "api/upload", "api/catalog-type", "api/spec-import", "api/report"}
+WRITE = {"api/characteristics", "api/catalog-presence", "api/upload", "api/catalog-type", "api/spec-import", "api/report"}
 FILES = re.compile(r"api/(?:pdf/[a-zA-Z0-9_-]+|reports/comparison_(?:Cu|Al)_[0-9]{3,5}\.(?:html|csv|json))")
 
 
