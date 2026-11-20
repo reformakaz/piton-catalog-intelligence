@@ -64,6 +64,9 @@ class Handler(BaseHTTPRequestHandler):
    if path.endswith('.json'):return self.send(200,jdata(data))
    return self.send(200,matrix_v7.as_csv(data),'text/csv; charset=utf-8',{'Content-Disposition':'attachment; filename="catalog_matrix_v7.csv"'})
   if path=='/api/health':return self.send(200,jdata({'ok':True,'version':'5.0','bind':'loopback'}))
+  if path=='/api/characteristics-template':
+   from catalog_characteristics import template
+   return template(self,DB)
   if path=='/api/spec-template':
    if self.params().get('phase')==['1']:
     from catalog_phase_conductor_v8_11_10 import CSV_FIELDS
@@ -125,6 +128,9 @@ class Handler(BaseHTTPRequestHandler):
   origin=self.headers.get('Origin','')
   if not getattr(self,'catalog_public',False) and origin and origin not in ('http://127.0.0.1:8137','http://localhost:8137'):
    return self.fail(403,'Недопустимый Origin')
+  if path=='/api/characteristics':
+   from catalog_characteristics import review
+   return review(self,DB)
   if path=='/api/catalog-type':
    from catalog_types_v8_11 import set_existing_type
    return set_existing_type(self,DB)
