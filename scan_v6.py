@@ -13,6 +13,13 @@ TABLES={
  63:('Cu',[2500,3200,4000,5000,6400],[650,755,858,960,1060],465),
 }
 ROWS=[('nominal_voltage_v','V',530),('icw_1s_ka','kA',634),('ipk_ka','kA',690),('r20_mohm_m','mΩ/m',738)]
+
+def header_status(page, ratings, recognized):
+ if recognized==ratings:return 'ok'
+ # Called only after verifying the PDF hash and page geometry.
+ if page==63 and recognized==[None,*ratings[1:]]:return 'recovered_2500_from_template'
+ return 'mismatch'
+
 def valid(k,v):
  return v is not None and ((k=='nominal_voltage_v' and v==1000) or (k=='icw_1s_ka' and 10<=v<=500) or (k=='ipk_ka' and 20<=v<=1000) or (k=='r20_mohm_m' and .0001<=v<=.5))
 def candidates(docid):
@@ -24,10 +31,11 @@ def candidates(docid):
  if docid!='piton' or filename!='piton.pdf':raise ValueError('OCR v6 поддерживает только исходный PitON E3')
  path=(ROOT/'catalogs'/filename).resolve()
  if not path.is_file() or path.parent!=(ROOT/'catalogs').resolve():raise ValueError('PDF не найден')
- digest=hashlib.sha256(path.read_bytes()).hexdigest()
+ pdf_bytes=path.read_bytes()
+ digest=hashlib.sha256(pdf_bytes).hexdigest()
  if digest!=KNOWN_PDF_SHA256:raise ValueError('SHA-256 каталога не совпадает с эталоном: распознавание остановлено. Требуется калибровка нового PDF.')
  proposals=[];rejected=[];diagnostics=[]
- with pymupdf.open(path) as pdf:
+ with pymupdf.open(stream=pdf_bytes,filetype='pdf') as pdf:
   if len(pdf)<63:raise ValueError('В PDF менее 63 страниц')
   for page_no,(material,ratings,xs,header_y) in TABLES.items():
    page=pdf[page_no-1]
@@ -36,12 +44,15 @@ def candidates(docid):
    if abs(pix.width-1248)>5 or abs(pix.height-1741)>5:raise ValueError('Неожиданный размер растра страницы '+str(page_no))
    im=Image.frombytes('RGB',(pix.width,pix.height),pix.samples)
    headers=[cell(im,x,header_y) for x in xs]
-   if headers!=[float(r) for r in ratings]:
+   status=header_status(page_no,ratings,headers)
+   if status=='mismatch':
     diagnostics.append({'page':page_no,'error':'Заголовки номиналов не совпали','recognized':headers,'expected':ratings})
     for key,unit,y in ROWS:
      for rating in ratings:rejected.append({'page':page_no,'material':material,'rating_a':rating,'parameter':key,'ocr':None,'reason':'header_mismatch'})
     continue
-   diagnostics.append({'page':page_no,'material':material,'ratings':len(ratings),'headers':'ok'})
+   diagnostic={'page':page_no,'material':material,'ratings':len(ratings),'headers':status}
+   if status!='ok':diagnostic.update(recognized=headers,expected=ratings)
+   diagnostics.append(diagnostic)
    for key,unit,y in ROWS:
     for rating,x in zip(ratings,xs):
      v=cell(im,x,y)
