@@ -9,21 +9,34 @@ PARAMS={
  'ipk_ka':('Ipk','high','kA'),
  'r20_mohm_m':('R20 при 20 °C','low','mΩ/m'),
 }
-METRIC_NOTES = {
- 'icw_1s_ka': 'Действующее значение тока короткого замыкания, которое шина выдерживает в течение 1 секунды.',
- 'ipk_ka': 'Максимальное мгновенное значение тока короткого замыкания, которое выдерживает шина.',
- 'r20_mohm_m': 'Активное сопротивление фазы при 20 °C на метр. При равных токе и длине меньшее сопротивление означает меньшие потери I²R.',
-}
 METRIC_CSS = """
-table .metric-explanation{display:block;margin-top:4px;color:#4a5d6e;font-size:.86em;line-height:1.4;font-weight:400}
-.construction-details .metric-highlight{display:inline-block;padding:1px 5px;border-radius:4px;background:#e5f1e8;color:#174c35;font-weight:700}
-.construction-details .metric-highlight small{display:inline;margin:0 0 0 4px;color:inherit;font-size:.85em}
+.catalog-comparison-table thead th{background:#e5f0e8;color:#143e2f}
+.catalog-comparison-table thead th:first-child{width:46%}
+.catalog-comparison-table thead th:nth-child(n+2){width:27%;overflow-wrap:anywhere}
+.catalog-comparison-table tbody th{font-weight:600}
+.catalog-comparison-table .metric-highlight{display:inline-block;padding:1px 5px;border-radius:4px;background:#e5f1e8;color:#174c35;font-weight:700}
+.catalog-comparison-table .metric-highlight small{display:inline;margin:0 0 0 4px;color:inherit;font-size:.85em}
+.catalog-comparison-table .comparison-note{display:block;margin-top:4px;color:#624617}
 """
 
 
-def metric_explanation(code):
- note = METRIC_NOTES.get(code)
- return f'<small class="metric-explanation">{html.escape(note)}</small>' if note else ''
+def metric_highlight(value, badge):
+ return f'<span class="metric-highlight">{value}<small>{html.escape(badge)}</small></span>' if badge else value
+
+
+def electrical_badge(detail, vendor):
+ if detail['verdict'] != vendor or detail.get('comparison_note'):
+  return ''
+ return {'high': 'выше', 'low': 'ниже'}.get(PARAMS[detail['code']][1], '')
+
+
+def comparison_note_markup(detail):
+ note = detail.get('comparison_note')
+ if not note and detail['verdict'] == 'different':
+  note = 'Требуется уточнение'
+ return f'<small class="comparison-note">{html.escape(note)}</small>' if note else ''
+
+
 SUSPECT=('manual_review','ocr','unverified','pending')
 
 IPK_UNIT_NOTE = 'Единица Ipk PitON требует сверки с протоколом испытаний'
@@ -142,27 +155,26 @@ def matrix(db,material='all'):
  return {'rows':rows,'totals':totals,'scope':material,'parameters':list(PARAMS)}
 
 def text(v):return html.escape(str(v),quote=True)
-def cell(r, comparison_source=None, conflict=None):
+def cell(r, comparison_source=None, conflict=None, badge=''):
  if not r:return '<span class="missing">Нет данных</span>'
  status=str(r.get('status') or '')
  review=' ⚠' if status.lower() in SUSPECT else ''
  link = f' · <a href="{text(comparison_source)}">Ipk: каталог EN</a>' if comparison_source else ''
  value = icw_conflict_links(conflict) if conflict else f'{r["value"]:g} {text(r["unit"])}'
- return f'<b>{value}</b>{review}<small>{text(r["source"] or "Источник не указан")}; статус: {text(status or "не указан")}{link}</small>'
+ return f'{metric_highlight(value, badge)}{review}<small>{text(r["source"] or "Источник не указан")}; статус: {text(status or "не указан")}{link}</small>'
 
 def page(data):
  from catalog_physical_v8_11_9 import comparison_markup
  rows=data['rows'];rows_html=[]
- names={'piton':'Преимущество PitON','graziadio':'Преимущество Graziadio','equal':'Сопоставимо','missing':'Недостаточно данных','different':'Различается / уточнить'}
  for entry in rows:
   detail=''.join(
-   f'<tr><td>{text(d["label"])}{metric_explanation(d["code"])}</td><td>{cell(d["piton"], d.get("comparison_source"), d.get("comparison_conflict"))}</td>'
-   f'<td>{cell(d["graziadio"])}</td>'
-   f'<td>{text(d.get("comparison_note") or names[d["verdict"]])}</td></tr>'
+   f'<tr><th scope="row">{text(d["label"])}{comparison_note_markup(d)}</th>'
+   f'<td>{cell(d["piton"], d.get("comparison_source"), d.get("comparison_conflict"), electrical_badge(d,"piton"))}</td>'
+   f'<td>{cell(d["graziadio"], badge=electrical_badge(d,"graziadio"))}</td></tr>'
    for d in entry['details']
   )
   ct=entry['counts']
-  rows_html.append(f'<details><summary><b>{text(entry["material"])} · {entry["rating_a"]} А</b> — PitON: {ct["piton"]}; Graziadio: {ct["graziadio"]}; совпадений: {ct["equal"]}; нет данных: {ct["missing"]}; уточнить: {ct["different"]}{" · ⚠ есть непроверенные значения" if entry["caution"] else ""}</summary><table><thead><tr><th>Характеристика</th><th>PitON E3</th><th>Graziadio ISOLSBARRA</th><th>Оценка</th></tr></thead><tbody>{detail}</tbody></table>{comparison_markup(entry["material"], entry["rating_a"], entry.get("phase_geometry", {}))}</details>')
+  rows_html.append(f'<details><summary><b>{text(entry["material"])} · {entry["rating_a"]} А</b> — PitON: {ct["piton"]}; Graziadio: {ct["graziadio"]}; совпадений: {ct["equal"]}; нет данных: {ct["missing"]}; уточнить: {ct["different"]}{" · ⚠ есть непроверенные значения" if entry["caution"] else ""}</summary><table class="catalog-comparison-table"><thead><tr><th>Параметр</th><th>PitON E3</th><th>Graziadio ISOLSBARRA</th></tr></thead><tbody>{detail}</tbody></table>{comparison_markup(entry["material"], entry["rating_a"], entry.get("phase_geometry", {}))}</details>')
  opts=''.join(f'<option value="{v}" {"selected" if v==data["scope"] else ""}>{label}</option>' for v,label in [('all','Cu и Al'),('Cu','Медь (Cu)'),('Al','Алюминий (Al)')])
  t=data['totals']
  return f'''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Catalog Intelligence — матрица сравнения</title><style>
