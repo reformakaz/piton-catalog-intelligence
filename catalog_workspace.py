@@ -6,20 +6,19 @@ from urllib.parse import parse_qs, urlsplit
 MOUNT = "/catalog/"
 ORIGIN = "https://ai.reforma.kz"
 ADMIN_HEADER = "X-Piton-Catalog-User"
-VIEWS = {"matrix", "card", "catalog", "series", "quote-comparison"}
 WORKSPACE_TABS = (
     ("compare", "Сравнение"),
     ("library", "Библиотека каталогов"),
     ("importer", "Импорт характеристик"),
     ("extractor", "Извлечение из PDF"),
-    ("matrix", "Матрица сравнений"),
 )
+ADMIN_SECTIONS = {"library", "importer", "extractor"}
 WORKSPACE_STYLE = """
 html.catalog-workspace{scrollbar-gutter:stable}
 .catalog-workspace main{box-sizing:border-box;width:100%;max-width:none}
 .catalog-workspace main > section{min-width:0}
 .catalog-workspace .workspace-header{display:block}
-.workspace-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0 0 18px}
+.workspace-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 18px}
 .workspace-tabs a{display:flex;align-items:center;justify-content:center;text-align:center;
   padding:9px 8px;color:#577082;border-bottom:3px solid transparent;text-decoration:none;font-weight:600}
 .workspace-tabs a[aria-current=page]{border-color:#06a0da;color:#007daf}
@@ -132,8 +131,10 @@ def public_route(handler):
         path = "/" + suffix
     elif not suffix:
         view = query.get("view", [""])[0]
-        show_matrix = not handler.catalog_admin or view in VIEWS or "material" in query
-        path = "/matrix-v7" if show_matrix else "/"
+        section = query.get("workspace", [""])[0]
+        show_shell = handler.catalog_admin and not view and section in ADMIN_SECTIONS and "material" not in query
+        handler.catalog_manager = handler.catalog_admin and not show_shell and view in ("", "matrix")
+        path = "/" if show_shell else "/matrix-v7"
     else:
         if suffix not in READ and not FILES.fullmatch(suffix):
             handler.fail(404, "Не найдено")
@@ -149,9 +150,9 @@ def public_route(handler):
 def workspace_shell(text, active):
     links = []
     for key, label in WORKSPACE_TABS:
-        href = "?view=matrix" if key == "matrix" else f"?workspace={key}"
+        href = "?view=matrix" if key == "compare" else f"?workspace={key}"
         current = ' aria-current="page"' if key == active else ""
-        local_tab = f' data-tab="{key}"' if active != "matrix" and key != "matrix" else ""
+        local_tab = f' data-tab="{key}"' if active != "compare" and key in ADMIN_SECTIONS else ""
         links.append(f'<a href="{href}"{current}{local_tab}>{label}</a>')
     nav = '<nav class="workspace-tabs" aria-label="Разделы каталога">' + "".join(links) + "</nav>"
     text = text.replace('<html lang="ru">', '<html lang="ru" class="catalog-workspace">', 1)
@@ -165,14 +166,12 @@ def public_html(handler, body):
     path = urlsplit(handler.path).path
     if path == "/":
         text = text.replace('href="/api/', 'href="/catalog/api/').replace('src="/ui.js"', 'src="/catalog/ui.js"')
-        key = handler.params().get("workspace", ["compare"])[0]
-        active = key if any(key == tab and tab != "matrix" for tab, _ in WORKSPACE_TABS) else "compare"
+        active = handler.params()["workspace"][0]
         return workspace_shell(text, active).encode()
     if path == "/matrix-v7":
         text = text.replace('action="/matrix-v7"', 'action="/catalog/"').replace('href="/api/matrix-v7.', 'href="/catalog/api/matrix-v7.')
         text = text.replace('action="/catalog/">', 'action="/catalog/"><input type="hidden" name="view" value="matrix">', 1)
-        view = handler.params().get("view", ["matrix"])[0]
-        if handler.catalog_admin and view not in VIEWS - {"matrix"}:
-            text = workspace_shell(text, "matrix")
+        if handler.catalog_manager:
+            text = workspace_shell(text, "compare")
         return text.encode()
     return body
