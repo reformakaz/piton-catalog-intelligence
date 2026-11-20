@@ -43,13 +43,18 @@ def ocr_image(png):
 def page_indices(count, selection):
     if not selection:
         return range(count)
-    if not isinstance(selection,str) or not re.fullmatch(r"[1-9][0-9]*(?:-[1-9][0-9]*)?",selection):
-        raise ValueError("Укажите страницу или диапазон, например 4-9.")
-    limits = [int(v) for v in selection.split("-")]
-    first, last = limits[0], limits[-1]
-    if not 1 <= first <= last <= count or last-first >= 12:
-        raise ValueError("Выберите до 12 страниц в пределах документа.")
-    return range(first-1,last)
+    if not isinstance(selection, str) or not re.fullmatch(r"[1-9][0-9]*(?:-[1-9][0-9]*)?(?:\s*,\s*[1-9][0-9]*(?:-[1-9][0-9]*)?)*", selection):
+        raise ValueError("Укажите страницы PDF, например 4, 9 или 4-6.")
+    indices = set()
+    for item in selection.split(","):
+        limits = [int(value) for value in item.strip().split("-")]
+        first, last = limits[0], limits[-1]
+        if not 1 <= first <= last <= count or last-first >= 12:
+            raise ValueError("Выберите до 12 страниц в пределах документа.")
+        indices.update(range(first-1,last))
+        if len(indices) > 12:
+            raise ValueError("За один запуск можно выбрать до 12 страниц.")
+    return sorted(indices)
 
 
 def read_pages(doc, selection):
