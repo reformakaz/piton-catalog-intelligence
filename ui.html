@@ -107,6 +107,14 @@ html:not(.catalog-workspace) main:has(> #library:not(.hidden)){max-width:none}
  .characteristics-steps li{font-size:12px;padding:5px}
  .characteristics-steps span{width:17px;height:17px;margin-right:3px}
 }
+#catalog-editor .catalog-editor-actions{flex-wrap:wrap}
+#catalog-editor button.catalog-danger{width:auto;margin-right:auto;border-color:#edd5d5;color:#873434;background:white}
+#catalog-editor button.catalog-danger:hover{background:#fff2f2}
+#catalog-archive{margin-top:18px}
+#catalog-archive summary{cursor:pointer;color:#006e9c;font-weight:600}
+#catalog-archive-items{list-style:none;padding:0}
+#catalog-archive-items li{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:1px solid #dce6ee;padding:8px 0}
+#catalog-archive-items .catalog-secondary{width:auto;height:auto;padding:6px 10px}
 </style></head><body><main><header><div><h1>PitON <span style="color:#079cd0">Catalog Intelligence</span></h1><small>Сравнение технических каталогов • v6</small></div><span class="badge">Локальный доступ через SSH</span></header><nav><button class="active" data-tab="compare">Сравнение</button><button data-tab="library">Библиотека каталогов</button><button data-tab="characteristics">Характеристики</button></nav>
 <section id="compare" class="panel"><h2>Сравнение оборудования</h2><p>Пилотная база характеристик PitON E3 и Graziadio ISOLSBARRA. Значения из сканированного каталога требуют инженерной проверки.</p><div class="warning">Сейчас автоматизировано сопоставление характеристик, внесённых в базу v1. Новые PDF загружаются в библиотеку, но их технические таблицы пока не распознаются автоматически.</div><div class="grid"><div><label for="material">Материал проводника</label><select id="material"><option value="Cu">Медь (Cu)</option><option value="Al">Алюминий (Al)</option></select></div><div><label for="rating">Номинальный ток</label><select id="rating"><option>4000</option><option>630</option><option>800</option><option>1000</option><option>1250</option><option>1600</option><option>2000</option><option>2500</option><option>3200</option><option>5000</option><option>6300</option><option>6400</option></select></div><div style="align-self:end"><button id="run">Сформировать сравнение</button></div></div><div id="compareStatus" class="status muted">Готов к анализу.</div><div id="results" class="hidden"><div class="links" id="download"></div><iframe id="preview" title="Предпросмотр отчёта" style="height:700px;width:100%;border:1px solid #e5ecf2;border-radius:8px"></iframe></div></section>
 <section id="library" class="hidden">
@@ -123,6 +131,10 @@ html:not(.catalog-workspace) main:has(> #library:not(.hidden)){max-width:none}
         <tbody id="docs"></tbody>
       </table>
     </div>
+    <details id="catalog-archive" hidden>
+      <summary>Удалённые каталоги</summary>
+      <ul id="catalog-archive-items"></ul>
+    </details>
   </section>
 
   <dialog id="catalog-editor" aria-labelledby="catalog-editor-heading">
@@ -136,6 +148,7 @@ html:not(.catalog-workspace) main:has(> #library:not(.hidden)){max-width:none}
       <input id="catalog-existing-vendor" maxlength="100">
       <div id="catalog-type-status" class="status" role="status" hidden></div>
       <div class="catalog-editor-actions">
+        <button id="catalog-editor-delete" class="catalog-secondary catalog-danger" type="button">Удалить из библиотеки</button>
         <button id="catalog-editor-cancel" class="catalog-secondary" type="button">Отмена</button>
         <button id="catalog-save-type" type="submit">Сохранить изменения</button>
       </div>
