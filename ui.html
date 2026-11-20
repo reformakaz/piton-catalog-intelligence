@@ -66,7 +66,42 @@ html:not(.catalog-workspace) main:has(> #library:not(.hidden)){max-width:none}
   #catalog-library .catalog-spec-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
   #catalog-library .catalog-spec-column-picker{grid-column:1/-1}
 }
-</style></head><body><main><header><div><h1>PitON <span style="color:#079cd0">Catalog Intelligence</span></h1><small>Сравнение технических каталогов • v6</small></div><span class="badge">Локальный доступ через SSH</span></header><nav><button class="active" data-tab="compare">Сравнение</button><button data-tab="library">Библиотека каталогов</button><button data-tab="importer">Импорт характеристик</button><button data-tab="extractor">Извлечение из PDF</button></nav>
+#characteristics [hidden]{display:none!important}
+.characteristics-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;list-style:none;padding:0;margin:14px 0 20px}
+.characteristics-steps li{padding:9px 11px;border:1px solid #dce6ee;border-radius:8px;background:#f5f9fc;color:#51687b;font-weight:600}
+.characteristics-steps li[aria-current=step]{background:#eaf5fb;border-color:#8acde6;color:#00638b}
+.characteristics-steps span{display:inline-grid;place-items:center;margin-right:6px;width:23px;height:23px;border-radius:50%;background:#e5edf4;font-size:12px}
+.characteristics-steps [aria-current=step] span{background:#087fac;color:white}
+.characteristics-document{max-width:440px}
+.characteristics-method{display:flex;flex-wrap:wrap;gap:10px;border:0;padding:0;margin:15px 0 10px}
+.characteristics-method legend{font-weight:600;margin-bottom:7px}
+.characteristics-method label{display:flex;align-items:center;gap:8px;border:1px solid #dce6ee;padding:9px 12px;border-radius:8px;font-size:inherit;color:#213547}
+.characteristics-method label:has(:checked){background:#eaf5fb;border-color:#8acde6}
+#characteristics input[type=checkbox],#characteristics input[type=radio]{width:16px;height:16px;margin:0;accent-color:#087fac}
+.characteristics-context,.characteristics-counts{padding:10px 13px;background:#f5f9fc;border:1px solid #dce6ee;border-radius:8px}
+.characteristics-toolbar,.characteristics-actions,.characteristics-counts{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.characteristics-toolbar{justify-content:space-between;margin-bottom:10px}
+.characteristics-toolbar h3{margin:0}
+.characteristics-actions{justify-content:flex-end;margin-top:14px}
+.characteristics-actions button:first-child:not(:only-child){margin-right:auto}
+#characteristics button.characteristics-secondary{background:white;color:#006e9c;border:1px solid #bfd0df}
+.characteristics-scroll{overflow:auto;border:1px solid #dce6ee;border-radius:8px}
+.characteristics-scroll table{min-width:740px}
+.characteristics-scroll :is(th,td):last-child{white-space:nowrap}
+.characteristics-scroll small{display:block;color:#546878;margin-top:3px}
+.characteristics-scroll td:nth-child(5){max-width:320px;overflow-wrap:anywhere}
+.characteristics-value{width:8em;max-width:100%}
+.characteristics-state{display:inline-block;padding:3px 7px;border-radius:5px;background:#eef3f7;color:#445e73;font-size:12px}
+.characteristics-state-new{background:#e8f3ed;color:#275d47}
+.characteristics-state-missing,.characteristics-state-conflict{background:#fff4e2;color:#80511b}
+.characteristics-counts{gap:12px 28px;margin:10px 0}
+.characteristics-counts strong{display:block;font-size:20px}
+@media(max-width:600px){
+ .characteristics-steps{gap:4px}
+ .characteristics-steps li{font-size:12px;padding:5px}
+ .characteristics-steps span{width:17px;height:17px;margin-right:3px}
+}
+</style></head><body><main><header><div><h1>PitON <span style="color:#079cd0">Catalog Intelligence</span></h1><small>Сравнение технических каталогов • v6</small></div><span class="badge">Локальный доступ через SSH</span></header><nav><button class="active" data-tab="compare">Сравнение</button><button data-tab="library">Библиотека каталогов</button><button data-tab="characteristics">Характеристики</button></nav>
 <section id="compare" class="panel"><h2>Сравнение оборудования</h2><p>Пилотная база характеристик PitON E3 и Graziadio ISOLSBARRA. Значения из сканированного каталога требуют инженерной проверки.</p><div class="warning">Сейчас автоматизировано сопоставление характеристик, внесённых в базу v1. Новые PDF загружаются в библиотеку, но их технические таблицы пока не распознаются автоматически.</div><div class="grid"><div><label for="material">Материал проводника</label><select id="material"><option value="Cu">Медь (Cu)</option><option value="Al">Алюминий (Al)</option></select></div><div><label for="rating">Номинальный ток</label><select id="rating"><option>4000</option><option>630</option><option>800</option><option>1000</option><option>1250</option><option>1600</option><option>2000</option><option>2500</option><option>3200</option><option>5000</option><option>6300</option><option>6400</option></select></div><div style="align-self:end"><button id="run">Сформировать сравнение</button></div></div><div id="compareStatus" class="status muted">Готов к анализу.</div><div id="results" class="hidden"><div class="links" id="download"></div><iframe id="preview" title="Предпросмотр отчёта" style="height:700px;width:100%;border:1px solid #e5ecf2;border-radius:8px"></iframe></div></section>
 <section id="library" class="hidden">
   <section class="panel" id="catalog-upload">
@@ -112,4 +147,60 @@ html:not(.catalog-workspace) main:has(> #library:not(.hidden)){max-width:none}
   </dialog>
 </section>
 
-<section id="importer" class="panel hidden"><h2>Импорт характеристик</h2><p>Загрузите CSV UTF-8 с разделителем «;». Сначала выполните предварительную проверку, затем подтвердите запись в базу. Исходные PDF остаются без изменений.</p><p><a href="/api/spec-template">Скачать шаблон CSV</a></p><p><a href="/api/spec-template?phase=1">Шаблон CSV «Сечение и размеры шины»</a>. Заполните известные значения и укажите каталог или чертёж с номером листа.</p><label for="specfile">CSV с проверенными параметрами</label><input type="file" accept=".csv,text/csv" id="specfile"><div class="space"></div><button id="specPreview">Проверить CSV</button> <button id="specApply" disabled>Импортировать в базу</button><div id="specStatus" class="status">Ожидание CSV</div><p class="warning">Источники должны содержать название каталога и номер страницы. Статус engineer_verified обозначает заявление пользователя, а не независимую проверку системой.</p></section><section id="extractor" class="panel hidden"><h2>Извлечение характеристик из PDF</h2><p>Выберите документ, выполните анализ таблиц и проверьте извлечённые значения перед импортом. Для графических PDF поддерживается OCR технических таблиц PitON E3: PDF страницы 60–63 (Al и Cu, 400–6400 А).</p><div class="grid"><div><label for="extractDoc">Каталог</label><select id="extractDoc"></select></div><div style="align-self:end"><button id="extractStart">Анализировать PDF</button> <button id="scanStart" style="background:#167664">OCR PitON E3 (стр. 60–63)</button></div></div><div id="extractStatus" class="status">Выберите каталог.</div><div id="extractActions" class="hidden"><p class="warning">Изменяйте числовые значения прямо в таблице. Пустые строки — это пропуски OCR, их надо заполнить вручную после сверки с PDF. Все значения имеют статус «Требует проверки». Перед импортом сверяйте с оригинальной страницей. Подтверждение применяет все выбранные значения и может обновить существующие записи.</p><div class="links"><button id="extractCheck">Проверить выбранное</button><button id="extractApply" disabled>Подтвердить и импортировать выбранное</button></div><div style="overflow:auto;max-height:560px"><table><thead><tr><th><input type="checkbox" id="extractAll" checked aria-label="Выбрать всё"></th><th>Материал</th><th>Ток</th><th>Параметр</th><th>Значение</th><th>Источник</th></tr></thead><tbody id="extractRows"></tbody></table></div></div></section><footer class="muted">OCR v6 — редактирование и подтверждение: только проверенные структуры страниц, с обязательной сверкой каждого значения. Внутренняя инженерная аналитика. Отсутствие параметра в каталоге не является недостатком оборудования. Документы не передаются внешним AI-сервисам.</footer></main><script src="/ui.js"></script></body></html>
+<section id="characteristics" class="panel hidden">
+  <h2>Характеристики</h2>
+  <ol class="characteristics-steps" aria-label="Этапы импорта">
+    <li><span>1</span> Источник данных</li>
+    <li><span>2</span> Проверка значений</li>
+    <li><span>3</span> Сохранение</li>
+  </ol>
+  <div id="characteristics-message" class="status" role="status" hidden></div>
+  <section id="characteristics-source" class="characteristics-step">
+    <label for="characteristics-document">В какой каталог добавить характеристики</label>
+    <select id="characteristics-document" class="characteristics-document"><option value="">Выберите каталог</option></select>
+    <fieldset class="characteristics-method">
+      <legend>Откуда взять данные</legend>
+      <label><input type="radio" name="characteristics-method" value="pdf" checked><span>PDF из библиотеки</span></label>
+      <label><input type="radio" name="characteristics-method" value="csv"><span>Файл CSV</span></label>
+    </fieldset>
+    <p id="characteristics-pdf-help">Таблицы будут извлечены из PDF выбранного каталога. Перед сохранением значения можно сверить с документом.</p>
+    <div id="characteristics-csv" hidden>
+      <label for="characteristics-file">Файл CSV</label>
+      <input type="file" id="characteristics-file" accept=".csv,text/csv">
+      <div id="characteristics-templates" class="links" hidden>
+        <a id="characteristics-standard-template">Шаблон электрических параметров</a>
+        <a id="characteristics-phase-template">Шаблон сечения и размеров шины</a>
+      </div>
+    </div>
+    <div class="characteristics-actions"><button id="characteristics-prepare" type="button">Извлечь характеристики</button></div>
+  </section>
+  <section id="characteristics-review" class="characteristics-step" hidden>
+    <p class="characteristics-context"></p>
+    <div class="characteristics-toolbar">
+      <h3>Сверьте значения перед сохранением</h3>
+      <button class="characteristics-secondary" id="characteristics-filter" type="button" aria-pressed="false">Только требуют внимания</button>
+    </div>
+    <div class="characteristics-scroll" role="region" aria-label="Таблица проверки" tabindex="0">
+      <table>
+        <thead><tr><th scope="col">Вкл.</th><th scope="col">Исполнение</th><th scope="col">Параметр</th><th scope="col">Значение</th><th scope="col">Источник</th><th scope="col">Статус</th></tr></thead>
+        <tbody id="characteristics-rows"></tbody>
+      </table>
+    </div>
+    <div class="characteristics-actions">
+      <button class="characteristics-secondary" id="characteristics-back-source" type="button">Назад</button>
+      <span id="characteristics-selection" role="status"></span>
+      <button id="characteristics-confirm" type="button">Проверить и продолжить</button>
+    </div>
+  </section>
+  <section id="characteristics-save" class="characteristics-step" hidden>
+    <p class="characteristics-context"></p>
+    <h3 id="characteristics-confirm-title">Подтвердите сохранение</h3>
+    <div id="characteristics-counts" class="characteristics-counts"></div>
+    <div class="characteristics-actions">
+      <button class="characteristics-secondary" id="characteristics-back-review" type="button">Вернуться к проверке</button>
+      <button id="characteristics-reset" type="button" hidden>Начать новый импорт</button>
+      <button id="characteristics-apply" type="button">Сохранить характеристики</button>
+    </div>
+  </section>
+</section>
+<script src="/ui.js"></script></body></html>
