@@ -14,14 +14,19 @@ METRIC_CSS = """
 .catalog-comparison-table thead th:first-child{width:46%}
 .catalog-comparison-table thead th:nth-child(n+2){width:27%;overflow-wrap:anywhere}
 .catalog-comparison-table tbody th{font-weight:600}
-.catalog-comparison-table .metric-highlight{display:inline-block;padding:1px 5px;border-radius:4px;background:#e5f1e8;color:#174c35;font-weight:700}
-.catalog-comparison-table .metric-highlight small{display:inline;margin:0 0 0 4px;color:inherit;font-size:.85em}
+.catalog-comparison-table .metric-highlight{display:inline-block;max-width:100%;padding:1px 5px;border-radius:4px;background:#e5f1e8;color:#174c35;font-weight:700}
+.catalog-comparison-table .metric-badge{display:inline-block;max-width:100%;margin-top:3px;padding:2px 6px;border-radius:4px;background:#145943;color:#fff;font-size:.82em;font-weight:700;line-height:1.25;overflow-wrap:anywhere}
 .catalog-comparison-table .comparison-note{display:block;margin-top:4px;color:#624617}
 """
 
 
 def metric_highlight(value, badge):
- return f'<span class="metric-highlight">{value}<small>{html.escape(badge)}</small></span>' if badge else value
+ if not badge:
+  return value
+ return (
+  f'<span class="metric-highlight">{value}</span> '
+  f'<span class="metric-badge">{html.escape(badge)}</span>'
+ )
 
 
 def electrical_badge(detail, vendor):
