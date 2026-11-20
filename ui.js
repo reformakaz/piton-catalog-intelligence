@@ -435,14 +435,16 @@ function renderCharacteristics() {
       ? '<a href="' + api('/api/pdf/' + encodeURIComponent(characteristics.document)) + '#page=' + row.page +
         '" target="_blank" rel="noopener">PDF, стр. ' + row.page + ' ↗</a>'
       : esc(row.source);
-    const current = row.current == null ? '' : '<small>В базе: ' + esc(String(row.current).replace('.', ',')) + ' ' + esc(row.unit) + '</small>';
+    const textual = ['dimensions_mm','insulation_type'].includes(row.parameter);
+    const shown = value => textual ? String(value ?? '') : String(value ?? '').replace('.', ',');
+    const current = row.current == null ? '' : '<small>В базе: ' + esc(shown(row.current)) + ' ' + esc(row.unit) + '</small>';
     return '<tr data-index="' + index + '" data-state="' + esc(row.state) + '">' +
       '<td><input type="checkbox" aria-label="Выбрать ' + esc(label) + '"' +
       (row.state === 'new' ? ' checked' : '') + (['missing','conflict','same'].includes(row.state) ? ' disabled' : '') + '></td>' +
       '<td>' + esc(row.material) + ' · ' + esc(row.rating_a) + ' А</td><td>' + esc(label) + '</td>' +
-      '<td><input type="text" class="characteristics-value" inputmode="decimal" maxlength="20" aria-label="' +
+      '<td><input type="text" class="characteristics-value" inputmode="' + (textual ? 'text' : 'decimal') + '" maxlength="' + (textual ? '140' : '20') + '" aria-label="' +
       esc(label + ' · ' + row.material + ' ' + row.rating_a + ' А') + '" value="' +
-      esc(String(row.value ?? '').replace('.', ',')) + '"' + (locked ? ' readonly' : '') + '> ' + esc(row.unit) + current + '</td>' +
+      esc(shown(row.value)) + '"' + (locked ? ' readonly' : '') + '> ' + esc(row.unit) + current + '</td>' +
       '<td>' + source + '</td><td><span class="characteristics-state characteristics-state-' + esc(row.state) + '">' +
       esc(characteristicStates[row.state]) + '</span></td></tr>';
   }).join('');
