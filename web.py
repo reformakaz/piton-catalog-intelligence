@@ -26,7 +26,7 @@ class Handler(BaseHTTPRequestHandler):
   self.send_header('X-Frame-Options','SAMEORIGIN' if report_preview else 'DENY')
   csp="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'" if report_preview else "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
   if code==200 and ctype.startswith('text/html') and urllib.parse.urlsplit(self.path).path=='/matrix-v7' and self.params().get('view')==['quote-comparison']:
-   csp=csp.replace("script-src 'self';","script-src 'self' 'sha256-sn2cKWAXkaSVTaijO+vCJq7t1is8O5v83HH1V42ZmR0=';",1)
+   csp=csp.replace("script-src 'self';","script-src 'self' 'sha256-PlD5WQ6XH04PGemdLFxnT3JrblwKELrol77KscyGIV4=';",1)
   self.send_header('Content-Security-Policy',csp)
   for k,v in (headers or {}).items():self.send_header(k,v)
   self.end_headers();self.wfile.write(body)

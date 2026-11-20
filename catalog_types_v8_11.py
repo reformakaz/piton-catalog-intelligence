@@ -311,6 +311,16 @@ def quote_page(handler, db):
         )
     picker = '<select id="quote-catalogues" hidden>'
     html = card.QUOTE_COMPARISON_HTML.replace(picker + "</select>", picker + "".join(options) + "</select>", 1)
+    templates = ""
+    if legacy_pair(db):
+        templates = "".join(
+            f'<template id="quote-tech-{row["material"]}-{row["rating_a"]}">'
+            f'{card.technical_comparison(row)}</template>'
+            for row in matrix_v7.matrix(db)["rows"] if card.paired(row)
+        )
+    html = html.replace('<div id="quote-technical-templates" hidden></div>',
+                        '<div id="quote-technical-templates" hidden>' + templates + '</div>', 1)
+    html = html.replace("/* QUOTE_TECHNICAL_CSS */", matrix_v7.METRIC_CSS, 1)
     handler.send(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
 
