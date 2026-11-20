@@ -19,8 +19,11 @@ def jdata(obj):return json.dumps(obj,ensure_ascii=False).encode()
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,fmt,*args):sys.stderr.write('[catalog] '+fmt%args+'\n')
  def send(self,code,body=b'',ctype='application/json; charset=utf-8',headers=None):
-  if getattr(self,'catalog_public',False) and code==200 and ctype.startswith('text/html'):
-   body=catalog_workspace.public_html(self,body)
+  if code==200 and ctype.startswith('text/html'):
+   if getattr(self,'catalog_public',False):
+    body=catalog_workspace.public_html(self,body)
+   path=urllib.parse.urlsplit(self.path).path
+   body=catalog_workspace.themed_html(body,path,(self.params().get('view') or [''])[0])
   self.send_response(code);self.send_header('Content-Type',ctype);self.send_header('Content-Length',str(len(body)))
   # PITON_CATALOG_REPORT_PREVIEW_FIX_V1: only same-origin report HTML may be framed.
   report_preview = (urllib.parse.urlsplit(self.path).path.startswith('/api/reports/')
