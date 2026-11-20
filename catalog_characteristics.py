@@ -92,9 +92,14 @@ def normalize(raw, vendor, product, allow_missing):
                 or "\0" in source or not isinstance(param, str)):
             raise ValueError(f"Строка {index}: проверьте материал, номинал и источник.")
         key = (material, int(rating), param)
-        if key in seen:
-            raise ValueError(f"Строка {index}: характеристика указана дважды.")
-        seen.add(key)
+        variant = row.get("rcp_variant", "")
+        if (not isinstance(variant, str) or (variant and
+                (vendor != "legrand" or not re.fullmatch(r"rcp-[1-9][0-9]?c",variant)))):
+            raise ValueError(f"Строка {index}: неизвестное исполнение.")
+        signature = (variant,*key)
+        if signature in seen:
+            raise ValueError(f"Строка {index}: характеристика этого исполнения указана дважды.")
+        seen.add(signature)
         value = row.get("value")
         status = row.get("status", "manual_review")
         if param in PHASE_FIELDS:
@@ -126,11 +131,27 @@ def normalize(raw, vendor, product, allow_missing):
             raise ValueError(f"Строка {index}: параметр не поддерживается.")
         page = row.get("page")
         result.append(dict(zip(FIELDS, (vendor, product, *key, value, unit, source.strip(), status))) |
-                      {"page": page if type(page) is int and page > 0 else None})
+                      {"page": page if type(page) is int and page > 0 else None, "rcp_variant": variant})
     return result
 
 
-def reviewed(conn, rows):
+def variant_specs(conn, document=None):
+    exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='catalog_variant_specs'").fetchone()
+    if not exists:
+        return []
+    spec = "SELECT document_id,rcp_variant,material,rating_a,parameter,value,unit,source,status,page FROM catalog_variant_specs"
+    records = conn.execute(spec + (" WHERE document_id=?" if document is not None else ""),
+                           (document,) if document is not None else ())
+    fields = "document_id rcp_variant material rating_a parameter value unit source status page".split()
+    result = []
+    for record in records:
+        row = dict(zip(fields,record))
+        row["value"] = json.loads(row["value"])
+        result.append(row)
+    return result
+
+
+def reviewed(conn, rows, document=None):
     vendor, product = rows[0]["vendor"], rows[0]["product"]
     existing = {
         (m, a, k): (p, value, unit, source, status)
@@ -140,6 +161,8 @@ def reviewed(conn, rows):
     }
     phase_existing = phase.PUBLISHED | phase.stored_rows(conn)
     imported = physical.stored_variants(conn)
+    by_variant = {(row["rcp_variant"],row["material"],row["rating_a"],row["parameter"]):row
+                  for row in variant_specs(conn,document)} if any(row.get("rcp_variant") for row in rows) else {}
     result = []
     for row in rows:
         material, rating, code = (row[k] for k in ("material", "rating_a", "parameter"))
@@ -151,6 +174,9 @@ def reviewed(conn, rows):
             key = ((vendor, product), material, rating)
             value = imported.get(key, {}).get(code) or physical.VARIANTS.get(key, {}).get(code)
             other = (product,value["value"],value["unit"],value["source"],value["status"]) if value else None
+        if row.get("rcp_variant"):
+            scoped = by_variant.get((row["rcp_variant"],material,rating,code))
+            other = (product,scoped["value"],scoped["unit"],scoped["source"],scoped["status"],scoped["page"]) if scoped else None
         foreign = other and identity(vendor, other[0]) != identity(vendor, product)
         if foreign:
             state = "conflict"
@@ -165,7 +191,25 @@ def reviewed(conn, rows):
     return result
 
 
-def write(conn, rows):
+def write(conn, rows, document=None):
+    scoped = [row for row in rows if row.get("rcp_variant")]
+    if scoped:
+        if not document:
+            raise ValueError("Нет PDF-источника для характеристик исполнения.")
+        conn.execute("""CREATE TABLE IF NOT EXISTS catalog_variant_specs (
+            document_id TEXT NOT NULL,rcp_variant TEXT NOT NULL,material TEXT NOT NULL,rating_a INTEGER NOT NULL,
+            parameter TEXT NOT NULL,value TEXT NOT NULL,unit TEXT NOT NULL,source TEXT NOT NULL,
+            status TEXT NOT NULL,page INTEGER,
+            PRIMARY KEY(document_id,rcp_variant,material,rating_a,parameter))""")
+        conn.executemany(
+            """INSERT INTO catalog_variant_specs(document_id,rcp_variant,material,rating_a,parameter,value,unit,source,status,page)
+            VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(document_id,rcp_variant,material,rating_a,parameter)
+            DO UPDATE SET value=excluded.value,unit=excluded.unit,source=excluded.source,status=excluded.status,page=excluded.page""",
+            ((document,row["rcp_variant"],row["material"],row["rating_a"],row["parameter"],
+              json.dumps(row["value"],ensure_ascii=False),row["unit"],row["source"],row["status"],row["page"])
+             for row in scoped),
+        )
+    rows = [row for row in rows if not row.get("rcp_variant")]
     electrical = [r for r in rows if r["parameter"] in spec_import.PARAMS]
     conn.executemany(
         """INSERT INTO specs(vendor,product,material,rating_a,parameter,value,unit,source,status)
@@ -235,9 +279,9 @@ def review(handler, db):
                     if not rows:
                         raise
                     supplemental = []
-                existing = {(row["material"],row["rating_a"],row["parameter"]) for row in rows}
+                existing = {(row.get("rcp_variant"),row["material"],row["rating_a"],row["parameter"]) for row in rows}
                 rows.extend(row for row in supplemental
-                            if (row["material"],row["rating_a"],row["parameter"]) not in existing)
+                            if (row.get("rcp_variant"),row["material"],row["rating_a"],row["parameter"]) not in existing)
             if not rows:
                 raise ValueError("Не нашлось значений с подтверждёнными строками источника. Проверьте страницы и исполнение.")
         elif action == "csv":
@@ -247,7 +291,7 @@ def review(handler, db):
             if not isinstance(payload, dict):
                 raise ValueError("Ожидались строки характеристик.")
             rows = payload.get("rows")
-        rows = reviewed(conn, normalize(rows, vendor, product, action == "pdf"))
+        rows = reviewed(conn, normalize(rows, vendor, product, action == "pdf"), document)
         if action in ("pdf", "ai-pdf", "csv"):
             return types.send_json(handler, 200, {"rows": [{k:v for k,v in row.items() if k != "snapshot"} for row in rows]})
         if any(row["state"] == "conflict" for row in rows):
@@ -257,7 +301,7 @@ def review(handler, db):
         if action == "save":
             if digest != payload.get("digest"):
                 return types.error(handler, "Данные изменились после проверки. Вернитесь к проверке строк.", 409)
-            write(conn, changes)
+            write(conn, changes, document)
         counts = {key:sum(row["state"] == key for row in rows) for key in ("new", "changed", "same")}
     return types.send_json(handler, 200, counts | {"digest": digest})
 

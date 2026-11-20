@@ -8,7 +8,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from catalog_pdf_ocr import PARAMETER_UNITS, literal_unit, literal_value, material_on_page, row_cells, table_header
+from catalog_pdf_ocr import PARAMETER_UNITS, literal_unit, literal_value, material_on_page, row_cells, table_header, variant_sections
 
 MODEL = "gpt-4.1-mini"
 PARAMETERS = {
@@ -74,7 +74,7 @@ def request_ai(pages, timeout):
             "Extract only the requested parameters with explicit conductor material and rated current from the same table. "
             "Use page image for alignment and transcription for literal evidence. Each row must give actual page, verbatim "
             "cell value (number or technical text), its literal unit, and literal row label or symbol. "
-            "Use only phases, never neutral, PE, earth or zero-sequence. No extrapolation, inference from adjacent columns, "
+            "Use only straight sections, never flanges, elbows, junctions or other fittings. Use only phases, never neutral, PE, earth or zero-sequence. No extrapolation, inference from adjacent columns, "
             "guessing blank cells or conversions. Omit ambiguous entries. variant must be the printed product configuration "
             "code when one is present (for example RCP-4C); use an empty string only for a single clearly unlabelled configuration. "
             "If the target catalogue explicitly identifies a variant, do not extract other variants. Icw must be 1 second and "
@@ -126,11 +126,9 @@ def supported_cell(page_text, row_label, code, value, unit, rating, material):
 
 
 def draft_rows(raw, sources, vendor, product, title):
-    drafts, collisions, variants = {}, set(), set()
+    drafts, collisions = {}, set()
     selected_variant = known_variant(product)
-    document_variants = {"-".join(match.groups()).lower() for text in sources.values() for match in VARIANT.finditer(text)}
-    if not selected_variant and len(document_variants) > 1:
-        raise ValueError("В PDF несколько исполнений RCP. Укажите диапазон страниц одного исполнения.")
+    sections = {page: variant_sections(text) for page,text in sources.items()}
     for row in raw:
         page, rating = row["page"], row["rating_a"]
         if page not in sources or not 400 <= rating <= 7500:
@@ -145,28 +143,24 @@ def draft_rows(raw, sources, vendor, product, title):
             value = literal_value(code,row["literal_value"])
         except ValueError:
             continue
-        text = sources[page]
-        if not supported_cell(text,row["row_label"],code,value,unit,rating,row["material"]):
+        variant = known_variant(row["variant"])
+        if selected_variant and variant and selected_variant != variant:
             continue
-        variant = known_variant(row["variant"]) or canonical(row["variant"])
-        printed = {"-".join(match.groups()).lower() for match in VARIANT.finditer(text)}
-        if printed and (variant not in printed or len(printed) != 1):
+        matching = {printed for printed,section in sections[page] if (not printed or printed == variant)
+                    and supported_cell(section,row["row_label"],code,value,unit,rating,row["material"])}
+        if not matching:
             continue
-        if variant and variant not in printed and variant not in canonical(text):
-            continue
-        if selected_variant and selected_variant != variant:
-            continue
-        variants.add(variant)
-        key = (row["material"],rating,code)
+        variant = next((name for name in matching if name), "")
+        key = (variant,row["material"],rating,code)
         prior = drafts.get(key)
         if prior and prior["value"] != value:
             collisions.add(key)
         elif not prior:
-            drafts[key] = dict(vendor=vendor, product=product, material=key[0], rating_a=rating,
+            drafts[key] = dict(vendor=vendor, product=product, material=row["material"], rating_a=rating,
                                parameter=code, value=value, unit=unit, status="manual_review", page=page,
                                source=f"{title[:200]}, PDF стр. {page}")
-    if len(variants) > 1:
-        raise ValueError("В таблицах несколько исполнений. Укажите страницы одного исполнения, чтобы не смешивать характеристики.")
+            if variant and vendor == "legrand":
+                drafts[key]["rcp_variant"] = variant
     return [row for key,row in drafts.items() if key not in collisions]
 
 
