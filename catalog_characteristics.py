@@ -46,9 +46,12 @@ def rows_from_csv(content, vendor, product):
     return rows
 
 
-def rows_from_pdf(doc, vendor, product):
-    if doc == "piton" and identity(vendor, product) == types.PITON:
+def rows_from_pdf(doc, vendor, product, checksum):
+    use_ocr = False
+    if identity(vendor, product) == types.PITON:
         import scan_v6
+        use_ocr = doc == "piton" or checksum == scan_v6.KNOWN_PDF_SHA256
+    if use_ocr:
         result = scan_v6.candidates(doc)
         rows = result["proposals"]
         seen = {(r["material"], r["rating_a"], r["parameter"]) for r in rows}
@@ -186,7 +189,8 @@ def review(handler, db):
         vendor, product = catalogue["spec_vendor"], catalogue["spec_product"]
         payload = {}
         if action == "pdf":
-            rows = rows_from_pdf(document, vendor, product)
+            checksum = conn.execute("SELECT sha256 FROM documents WHERE id=?", (document,)).fetchone()[0]
+            rows = rows_from_pdf(document, vendor, product, checksum)
         elif action == "csv":
             rows = rows_from_csv(handler.readbody(), vendor, product)
         else:
