@@ -73,6 +73,8 @@ html:not(.catalog-workspace) main:has(> #library:not(.hidden)){max-width:none}
 .characteristics-steps span{display:inline-grid;place-items:center;margin-right:6px;width:23px;height:23px;border-radius:50%;background:#e5edf4;font-size:12px}
 .characteristics-steps [aria-current=step] span{background:#087fac;color:white}
 .characteristics-document{max-width:440px}
+.characteristics-ai-option{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:inherit;font-weight:600}
+#characteristics-pdf-pages summary{cursor:pointer;color:#006e9c;margin:10px 0 6px}
 .characteristics-upload-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;margin:0 0 8px}
 .characteristics-upload-fields div:last-child{grid-column:span 2}
 #library-add-catalogue{display:inline-block;text-decoration:none}
@@ -179,8 +181,12 @@ html:not(.catalog-workspace) main:has(> #library:not(.hidden)){max-width:none}
     </div>
     <details id="characteristics-pdf-pages">
       <summary>Страницы с таблицами</summary>
-      <label for="characteristics-pages">Страница или диапазон, например 4-9</label>
-      <input id="characteristics-pages" class="characteristics-document" placeholder="Весь документ" maxlength="16">
+      <label for="characteristics-pages">Страницы PDF, например 4, 9 или 4-6</label>
+      <input id="characteristics-pages" class="characteristics-document" placeholder="Автоматический выбор для локального OCR" maxlength="100">
+      <label for="characteristics-ai" class="characteristics-ai-option">
+        <input id="characteristics-ai" type="checkbox" autocomplete="off">
+        <span>Отправить указанные страницы в OpenAI для распознавания</span>
+      </label>
     </details>
     <div class="characteristics-actions"><button id="characteristics-prepare" type="button">Загрузить и распознать</button><button id="characteristics-use-csv" class="characteristics-secondary" type="button" hidden>Импортировать из CSV</button></div>
   </section>
