@@ -303,6 +303,8 @@ def matrix_view(data, params, base_page):
         return 200, QUOTE_COMPARISON_HTML
     if view != "card":
         page = annotate_matrix(base_page(data), data["rows"])
+        if 'id="offer-comparison-entry"' in page:
+            return 200, page
         button = '<p><a class="download" id="offer-comparison-entry" href="?view=quote-comparison">Сравнение КП</a></p>'
         return 200, page.replace("</h1>", "</h1>" + button, 1)
     material, raw_rating = (params.get("material") or [""])[0], (params.get("rating") or [""])[0]
