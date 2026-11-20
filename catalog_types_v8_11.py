@@ -235,6 +235,45 @@ def set_existing_type(handler, db):
     send_json(handler, 200, {"ok": True})
 
 
+DOCUMENT_FIELDS = "id,title,filename,pages,text_pages,sha256,created_at"
+
+
+def archived_documents(conn):
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='catalog_archive'").fetchone():
+        return []
+    return [dict(row) for row in conn.execute(
+        "SELECT id,title,archived_at FROM catalog_archive ORDER BY archived_at DESC,title"
+    )]
+
+
+def set_document_presence(handler, db):
+    document = param(handler, "document")
+    action = param(handler, "action")
+    if not document or len(document)>255 or action not in ("archive","restore"):
+        raise ValueError("Выберите каталог и действие.")
+    with closing(db_connect(db, writable=True)) as conn, conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("""CREATE TABLE IF NOT EXISTS catalog_archive (
+            id TEXT PRIMARY KEY,title TEXT,filename TEXT,pages INTEGER,text_pages INTEGER,
+            sha256 TEXT,created_at TEXT,archived_at TEXT NOT NULL
+        )""")
+        active = conn.execute("SELECT 1 FROM documents WHERE id=?", (document,)).fetchone()
+        archived = conn.execute("SELECT 1 FROM catalog_archive WHERE id=?", (document,)).fetchone()
+        if active and archived:
+            raise ValueError("Идентификатор занят другой записью. Каталог не изменён.")
+        if not (active or archived):
+            return error(handler,"Каталог не найден.",404)
+        if action == "archive" and active:
+            conn.execute(f"INSERT INTO catalog_archive ({DOCUMENT_FIELDS}, archived_at) "
+                         f"SELECT {DOCUMENT_FIELDS}, datetime('now') FROM documents WHERE id=?", (document,))
+            conn.execute("DELETE FROM documents WHERE id=?", (document,))
+        elif action == "restore" and archived:
+            conn.execute(f"INSERT INTO documents ({DOCUMENT_FIELDS}) "
+                         f"SELECT {DOCUMENT_FIELDS} FROM catalog_archive WHERE id=?", (document,))
+            conn.execute("DELETE FROM catalog_archive WHERE id=?", (document,))
+    return send_json(handler,200,{"ok":True,"archived":action=="archive"})
+
+
 def legacy_pair(db):
     return product_type(db, PITON) == product_type(db, GRAZIADIO) == "shp"
 

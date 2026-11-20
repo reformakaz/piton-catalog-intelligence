@@ -49,6 +49,7 @@ try {
 const catalogueEditor = $('#catalog-editor');
 const catalogueSave = $('#catalog-save-type');
 const catalogueCancel = $('#catalog-editor-cancel');
+const catalogueDelete = $('#catalog-editor-delete');
 
 function libraryStatus(text) {
   const status = $('#catalog-library-status');
@@ -116,6 +117,13 @@ async function load() {
         '<button type="button" class="catalog-secondary" data-catalog-edit="'+esc(id)+
         '" aria-label="Редактировать каталог '+esc(doc.title || id)+'">Редактировать</button></div></td></tr>';
     }).join('') || '<tr><td colspan="5">Документы не найдены</td></tr>';
+    const archived = library.archived_documents || [];
+    $('#catalog-archive').hidden = !archived.length;
+    $('#catalog-archive-items').innerHTML = archived.map(row =>
+      '<li><span>' + esc(row.title || row.id) + '</span>' +
+      '<button type="button" class="catalog-secondary" data-catalog-restore="' + esc(row.id) +
+      '" aria-label="Восстановить ' + esc(row.title || row.id) + '">Восстановить</button></li>'
+    ).join('');
     if (expanded) {
       const button = [...$('#docs').querySelectorAll('[data-catalog-specs]')].find(item=>item.dataset.catalogSpecs === expanded.id);
       if (button) showCatalogueSpecs(button,expanded);
@@ -303,6 +311,47 @@ catalogueCancel.addEventListener('click', closeCatalogueEditor);
 catalogueEditor.addEventListener('cancel', event => {
   event.preventDefault();
   if (!catalogueSave.disabled) closeCatalogueEditor();
+});
+
+function cataloguePresence(document, action) {
+  const query = new URLSearchParams({document,action});
+  return req('/api/catalog-presence?' + query, {method:'POST'});
+}
+
+catalogueDelete.addEventListener('click', async () => {
+  const selected = editingCatalogue;
+  if (!selected || catalogueSave.disabled || catalogueDelete.disabled) return;
+  if (!window.confirm('Удалить «' + (selected.title || selected.id) +
+      '» из библиотеки? Каталог можно будет восстановить.')) return;
+  catalogueDelete.disabled = catalogueSave.disabled = catalogueCancel.disabled = true;
+  try {
+    await cataloguePresence(selected.id,'archive');
+    if (openSpecs?.id === selected.id) closeCatalogueSpecs(false);
+    closeCatalogueEditor();
+    if (await load()) {
+      libraryStatus('Каталог удалён. Его можно восстановить в разделе «Удалённые каталоги».');
+      $('#library-add-catalogue')?.focus();
+    }
+  } catch (error) {
+    editorStatus(error.message);
+  } finally {
+    catalogueDelete.disabled = catalogueSave.disabled = catalogueCancel.disabled = false;
+  }
+});
+
+$('#catalog-archive-items').addEventListener('click', async event => {
+  const button = event.target.closest('[data-catalog-restore]');
+  if (!button || button.disabled) return;
+  button.disabled = true;
+  libraryStatus('');
+  try {
+    await cataloguePresence(button.dataset.catalogRestore,'restore');
+    if (await load()) libraryStatus('Каталог восстановлен.');
+  } catch (error) {
+    libraryStatus(error.message);
+  } finally {
+    button.disabled = false;
+  }
 });
 
 $('#catalog-editor-form').addEventListener('submit',async event => {

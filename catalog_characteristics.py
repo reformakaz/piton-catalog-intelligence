@@ -25,7 +25,9 @@ def identity(vendor, product):
 
 def target(conn, document):
     catalogue = next((row for row in types.library_catalogues(conn) if row["document_id"] == document), None)
-    if not catalogue or not catalogue["comparison_type"] or not catalogue["spec_vendor"] or not catalogue["spec_product"]:
+    if not catalogue:
+        raise ValueError("Каталог удалён из библиотеки или не найден.")
+    if not catalogue["comparison_type"] or not catalogue["spec_vendor"] or not catalogue["spec_product"]:
         raise ValueError("Укажите производителя и тип каталога в библиотеке.")
     return catalogue
 
@@ -139,8 +141,8 @@ def variant_specs(conn, document=None):
     exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='catalog_variant_specs'").fetchone()
     if not exists:
         return []
-    spec = "SELECT document_id,rcp_variant,material,rating_a,parameter,value,unit,source,status,page FROM catalog_variant_specs"
-    records = conn.execute(spec + (" WHERE document_id=?" if document is not None else ""),
+    spec = "SELECT document_id,rcp_variant,material,rating_a,parameter,value,unit,source,status,page FROM catalog_variant_specs WHERE document_id IN (SELECT id FROM documents)"
+    records = conn.execute(spec + (" AND document_id=?" if document is not None else ""),
                            (document,) if document is not None else ())
     fields = "document_id rcp_variant material rating_a parameter value unit source status page".split()
     result = []
