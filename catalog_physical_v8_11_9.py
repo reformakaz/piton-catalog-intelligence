@@ -102,12 +102,14 @@ def evidence(entry):
     return f'<a href="{escape(entry["source_url"], quote=True)}">{label}</a>'
 
 
-def section_axes(entry):
+def section_area(entry):
     if not entry or entry["unit"] != "мм":
-        return None, None
-    width, _, height = str(entry["value"]).partition("×")
-    return tuple({"value": int(axis), "unit": "мм"} if axis.strip().isdecimal() else None
-                 for axis in (width, height))
+        return None
+    width, _, height = (part.strip() for part in str(entry["value"]).partition("×"))
+    if not width.isdecimal() or not height.isdecimal():
+        return None
+    area = int(width) * int(height)
+    return {"value": area, "unit": "мм²"} if area > 0 else None
 
 
 def comparison_row(label, left, right, highlight=None):
@@ -134,12 +136,14 @@ def comparison_markup(material, rating, phase_geometry):
         return ""
     built_rows = []
     for code, label in LABELS.items():
+        if code in ("phase_width_mm", "phase_height_mm"):
+            continue
         left, right = piton.get(code), graziadio.get(code)
         if code == "dimensions_mm":
-            for axis, piton_axis, graziadio_axis in zip(
-                ("Ширина секции (Ш)", "Высота секции (В)"), section_axes(left), section_axes(right)
-            ):
-                built_rows.append(comparison_row(axis, piton_axis, graziadio_axis, ("меньше", "мм")))
+            built_rows.append(comparison_row(
+                "Площадь габаритного сечения секции (Ш × В)",
+                section_area(left), section_area(right), ("меньше", "мм²"),
+            ))
         else:
             highlight = ("больше", "мм²") if code == "phase_area_mm2" else None
             built_rows.append(comparison_row(label, left, right, highlight))
