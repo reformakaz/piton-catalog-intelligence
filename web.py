@@ -94,11 +94,10 @@ class Handler(BaseHTTPRequestHandler):
    return self.send(200,jdata(extract_v4.candidates(doc)))
   if path=='/api/library':
    import catalog_physical_v8_11_9 as physical
-   from catalog_phase_conductor_v8_11_10 import geometry
    with connection() as c:
     docs=[dict(x) for x in c.execute('SELECT * FROM documents ORDER BY created_at DESC')]
     specs=[dict(x) for x in c.execute('SELECT vendor,product,material,rating_a,parameter,value,unit,source,status FROM specs ORDER BY vendor,material,rating_a')]
-    construction=physical.records(geometry(c))
+    construction=physical.records(physical.geometry(c))
    return self.send(200,jdata({'documents':docs,'specs':specs,'physical':construction,'parameters':{**PARAMS,**physical.LABELS},'note':'Новые PDF индексируются, но их спецификации не распознаются автоматически; у v1 только пилот Cu 4000 A.'}))
   if path.startswith('/api/pdf/'):
    docid=path.split('/')[-1]
