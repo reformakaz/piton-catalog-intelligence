@@ -90,8 +90,6 @@ def read_pages(doc, selection):
 
 def choose_pages(doc, texts, selected):
     hits = [(i,t) for i,t in texts if TABLE_TERMS.search(t)]
-    if not selected and len(hits) > 12:
-        raise ValueError("Нашлось больше 12 страниц с техническими таблицами. Укажите диапазон страниц нужного исполнения.")
     if not selected and not hits and len(texts) > 12:
         raise ValueError("Не удалось выделить страницы с таблицами. Укажите диапазон страниц для распознавания.")
     picks = texts if selected or not hits else hits
@@ -121,6 +119,9 @@ def table_header(text):
 
 
 def material_on_page(text):
+    heading = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    if re.match(r"^(?:Legrand\s+)?RCP",heading,re.I) and re.search(r"Alumini?um|Copper|алюмини|мед[ьн]",heading,re.I):
+        text = heading
     copper = bool(re.search(r"\bcopper\b|\bcu\b|медь|медн",text,re.I))
     aluminium = bool(re.search(r"\balumin(?:i)?um\b|\bal\b|алюмини",text,re.I))
     if copper == aluminium:
@@ -162,7 +163,7 @@ def literal_unit(code, unit):
 
 
 def row_cells(line, code, unit, count):
-    if EXCLUDED_ROW.search(line) or not LABEL_SIGNATURES[code].search(line):
+    if EXCLUDED_ROW.search(line) or FITTING_ROW.search(line) or not LABEL_SIGNATURES[code].search(line):
         return ()
     if code == "icw_1s_ka" and not re.search(r"(?<![\d.,])1\s*(?:s|с|sec)\b",line,re.I):
         return ()
@@ -198,36 +199,82 @@ def known_variants(text):
     return {"-".join(match.groups()).lower() for match in VARIANT.finditer(text)}
 
 
+FITTING = (
+    r"flanges?|elbows?|bends?|angles?|tees?|offsets?|end covers?|end caps?|junctions?|"
+    r"accessories|hangers?|fixing|reducers?|expansion units?|"
+    r"фланц\w*|угл\w*|отвод\w*|тройник\w*|заглушк\w*|соединител\w*|"
+    r"креплен\w*|комплектующ\w*|аксессуар\w*|переходник\w*|компенсатор\w*"
+)
+FITTING_HEADING = re.compile(
+    r"^[ \t]*(?:\d+(?:\.\d+)*[.)]?\s+)?(?:dimension(?:s|al)?(?: drawings?)?\s*[-:–]\s*)?"
+    r"(?:"+FITTING+r")\b[^\n]{0,85}$",re.I|re.M
+)
+STRAIGHT_HEADING = re.compile(
+    r"^[ \t]*(?:\d+(?:\.\d+)*[.)]?\s+)?(?:straight (?:lengths?|sections?|units?)|"
+    r"прям\w* секци\w*)\b[^\n]{0,85}$",re.I|re.M
+)
+FITTING_ROW = re.compile(r"\b(?:"+FITTING+r")\b|стык\w*",re.I)
+
+
+def straight_sections(text):
+    headers = sorted([(m.start(),False) for m in FITTING_HEADING.finditer(text) if "[" not in m[0]]
+                     + [(m.start(),True) for m in STRAIGHT_HEADING.finditer(text)])
+    result, start, straight = [],0,True
+    for offset,is_straight in headers:
+        if straight and offset>start:
+            result.append(text[start:offset])
+        start,straight=offset,is_straight
+    if straight:
+        result.append(text[start:])
+    return result
+
+
+def variant_sections(text):
+    result=[]
+    for section in straight_sections(text):
+        # Only headings that identify material or conductor configuration
+        # start a table. Model codes mentioned in notes do not split it.
+        headings = list(re.finditer(
+            r"^[ \t]*(?:Legrand[ \t]+)?(rcp)[\s\-‐‑–—]*(\d+c)\b[^\n]{0,60}"
+            r"(?:alumin|copper|алюмини|мед[ьн]|3\s*[pl]\s*\+)",section,re.I|re.M
+        ))
+        if not headings:
+            result.append(("",section))
+            continue
+        for index,match in enumerate(headings):
+            end=headings[index+1].start() if index+1<len(headings) else len(section)
+            result.append(("-".join(match.groups()).lower(),section[match.start():end]))
+    return result
+
+
 def table_drafts(pages, vendor, product, title):
     chosen = known_variants(product)
-    all_variants = set().union(*(known_variants(text) for _,text in pages))
-    if not chosen and len(all_variants)>1:
-        raise ValueError("В PDF несколько исполнений RCP. Укажите диапазон страниц одного исполнения.")
     drafts, conflicts = {},set()
     for page,text in pages:
-        variants = known_variants(text)
-        if len(variants)>1 or (chosen and variants != chosen):
-            continue
-        ratings, material = table_header(text),material_on_page(text)
-        if not ratings or not material:
-            continue
-        for line in text.splitlines():
-            for code in LABEL_SIGNATURES:
-                unit=PARAMETER_UNITS[code]
-                cells = row_cells(line,code,unit,len(ratings))
-                for rating,value in zip(ratings,cells):
-                    if value is None:
-                        continue
-                    key=(material,rating,code)
-                    if key in drafts:
-                        if drafts[key]["value"]!=value:
-                            conflicts.add(key)
-                        continue
-                    drafts[key]=dict(vendor=vendor,product=product,material=material,rating_a=rating,
-                                     parameter=code,value=value,unit=unit,status="manual_review",page=page,
-                                     source=f"{title[:200]}, PDF стр. {page}")
+        for variant, section in variant_sections(text):
+            if chosen and variant and variant not in chosen:
+                continue
+            ratings, material = table_header(section),material_on_page(section)
+            if not ratings or not material:
+                continue
+            for line in section.splitlines():
+                for code in LABEL_SIGNATURES:
+                    unit=PARAMETER_UNITS[code]
+                    cells = row_cells(line,code,unit,len(ratings))
+                    for rating,value in zip(ratings,cells):
+                        if value is None:
+                            continue
+                        key=(variant,material,rating,code)
+                        if key in drafts:
+                            if drafts[key]["value"]!=value:
+                                conflicts.add(key)
+                            continue
+                        drafts[key]=dict(vendor=vendor, product=product, material=material, rating_a=rating,
+                                         parameter=code, value=value, unit=unit, status="manual_review", page=page,
+                                         source=f"{title[:200]}, PDF стр. {page}")
+                        if variant and vendor == "legrand":
+                            drafts[key]["rcp_variant"]=variant
     return [row for key,row in drafts.items() if key not in conflicts]
-
 
 def extract(root, filename, title, vendor, product, selection=""):
     import pymupdf
