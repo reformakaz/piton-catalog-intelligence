@@ -9,6 +9,21 @@ PARAMS={
  'ipk_ka':('Ipk','high','kA'),
  'r20_mohm_m':('R20 при 20 °C','low','mΩ/m'),
 }
+METRIC_NOTES = {
+ 'icw_1s_ka': 'Действующее значение тока короткого замыкания, которое шина выдерживает в течение 1 секунды.',
+ 'ipk_ka': 'Максимальное мгновенное значение тока короткого замыкания, которое выдерживает шина.',
+ 'r20_mohm_m': 'Активное сопротивление фазы при 20 °C на метр. При равных токе и длине меньшее сопротивление означает меньшие потери I²R.',
+}
+METRIC_CSS = """
+table .metric-explanation{display:block;margin-top:4px;color:#4a5d6e;font-size:.86em;line-height:1.4;font-weight:400}
+.construction-details .metric-highlight{display:inline-block;padding:1px 5px;border-radius:4px;background:#e5f1e8;color:#174c35;font-weight:700}
+.construction-details .metric-highlight small{display:inline;margin:0 0 0 4px;color:inherit;font-size:.85em}
+"""
+
+
+def metric_explanation(code):
+ note = METRIC_NOTES.get(code)
+ return f'<small class="metric-explanation">{html.escape(note)}</small>' if note else ''
 SUSPECT=('manual_review','ocr','unverified','pending')
 
 IPK_UNIT_NOTE = 'Единица Ipk PitON требует сверки с протоколом испытаний'
@@ -141,7 +156,7 @@ def page(data):
  names={'piton':'Преимущество PitON','graziadio':'Преимущество Graziadio','equal':'Сопоставимо','missing':'Недостаточно данных','different':'Различается / уточнить'}
  for entry in rows:
   detail=''.join(
-   f'<tr><td>{text(d["label"])}</td><td>{cell(d["piton"], d.get("comparison_source"), d.get("comparison_conflict"))}</td>'
+   f'<tr><td>{text(d["label"])}{metric_explanation(d["code"])}</td><td>{cell(d["piton"], d.get("comparison_source"), d.get("comparison_conflict"))}</td>'
    f'<td>{cell(d["graziadio"])}</td>'
    f'<td>{text(d.get("comparison_note") or names[d["verdict"]])}</td></tr>'
    for d in entry['details']
@@ -152,7 +167,7 @@ def page(data):
  t=data['totals']
  return f'''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Catalog Intelligence — матрица сравнения</title><style>
  body{{font:14px/1.5 system-ui,Arial;background:#f1f5f9;color:#17243a;margin:0;padding:25px}}main{{max-width:1250px;margin:auto;background:white;padding:25px;border-radius:12px}}h1{{margin:0 0 7px}}.muted,small{{color:#60748c}}.note{{padding:12px;border-left:4px solid #e8a121;background:#fff8e8;margin:16px 0}}.stats{{display:flex;gap:12px;flex-wrap:wrap}}.stats span{{padding:11px;background:#eef4f8;border-radius:7px}}details{{border:1px solid #d5dfe8;border-radius:8px;margin:12px 0}}summary{{padding:14px;cursor:pointer;background:#f8fafc}}table{{width:100%;border-collapse:collapse}}th,td{{text-align:left;padding:10px;border-top:1px solid #e5e9ee;vertical-align:top}}td small{{display:block;font-size:11px;max-width:300px;overflow-wrap:anywhere;margin-top:5px}}.missing{{color:#9b5b1b}}select,button,a.download{{padding:9px;border:1px solid #b6c9d7;border-radius:6px;background:#fff;color:#135b88}}a.download{{display:inline-block;text-decoration:none}}@media(max-width:750px){{body{{padding:4px}}main{{padding:10px}}th,td{{font-size:11px;padding:4px}}}}
- </style></head><body><main><p><a href="/">← Вернуться в Catalog Intelligence</a></p><h1>Матрица сравнения PitON E3 / Graziadio</h1><p class="muted">Только сведения из локальной базы, без AI-догадок. Сравниваются одинаковые материалы и номинальные токи.</p><form method="get" action="/matrix-v7"><label>Материал: <select name="material">{opts}</select></label> <button type="submit">Показать</button> <a class="download" href="/api/matrix-v7.csv?material={text(data['scope'])}">CSV ↓</a> <a class="download" href="/api/matrix-v7.json?material={text(data['scope'])}">JSON ↓</a></form><div class="note">Отсутствие данных не означает недостаток изделия. «Преимущество» относится только к конкретному числовому параметру, а не ко всему оборудованию. Проверяйте исполнение, конфигурацию N/PE и испытательные протоколы. ⚠ — характеристика требует проверки.</div><div class="stats"><span><b>{len(rows)}</b> сочетаний материал/номинал</span><span><b>{t['piton']}</b> преимуществ PitON</span><span><b>{t['graziadio']}</b> преимуществ Graziadio</span><span><b>{t['missing']}</b> сравнений без данных</span><span><b>{t['different']}</b> требуют уточнения</span></div>{''.join(rows_html) if rows_html else '<p>Нет характеристик для выбранного материала.</p>'}<h2>Рекомендации менеджеру</h2><ol><li>Не сравнивать несопоставимые исполнения (нейтраль, PE, IP, стандарт испытания).</li><li>При преимуществе по R20 предлагать расчёт потерь только с учётом длины трассы, профиля нагрузки и температуры.</li><li>При сравнении Icw/Ipk запросить расчётные токи КЗ и требования проекта.</li><li>Проверить все строки с ⚠ по оригинальному PDF перед отправкой заказчику.</li></ol><p class="muted">Внутренний аналитический материал; не является сертификатом соответствия или расчётом проекта.</p></main></body></html>'''
+ {METRIC_CSS}</style></head><body><main><p><a href="/">← Вернуться в Catalog Intelligence</a></p><h1>Матрица сравнения PitON E3 / Graziadio</h1><p class="muted">Только сведения из локальной базы, без AI-догадок. Сравниваются одинаковые материалы и номинальные токи.</p><form method="get" action="/matrix-v7"><label>Материал: <select name="material">{opts}</select></label> <button type="submit">Показать</button> <a class="download" href="/api/matrix-v7.csv?material={text(data['scope'])}">CSV ↓</a> <a class="download" href="/api/matrix-v7.json?material={text(data['scope'])}">JSON ↓</a></form><div class="note">Отсутствие данных не означает недостаток изделия. «Преимущество» относится только к конкретному числовому параметру, а не ко всему оборудованию. Проверяйте исполнение, конфигурацию N/PE и испытательные протоколы. ⚠ — характеристика требует проверки.</div><div class="stats"><span><b>{len(rows)}</b> сочетаний материал/номинал</span><span><b>{t['piton']}</b> преимуществ PitON</span><span><b>{t['graziadio']}</b> преимуществ Graziadio</span><span><b>{t['missing']}</b> сравнений без данных</span><span><b>{t['different']}</b> требуют уточнения</span></div>{''.join(rows_html) if rows_html else '<p>Нет характеристик для выбранного материала.</p>'}<h2>Рекомендации менеджеру</h2><ol><li>Не сравнивать несопоставимые исполнения (нейтраль, PE, IP, стандарт испытания).</li><li>При преимуществе по R20 предлагать расчёт потерь только с учётом длины трассы, профиля нагрузки и температуры.</li><li>При сравнении Icw/Ipk запросить расчётные токи КЗ и требования проекта.</li><li>Проверить все строки с ⚠ по оригинальному PDF перед отправкой заказчику.</li></ol><p class="muted">Внутренний аналитический материал; не является сертификатом соответствия или расчётом проекта.</p></main></body></html>'''
 
 def as_csv(data):
  s=io.StringIO();w=csv.writer(s,delimiter=';');w.writerow(['Материал','Ток, А','Параметр','PitON','Ед. PitON','Источник PitON','Статус PitON','Graziadio','Ед. Graziadio','Источник Graziadio','Статус Graziadio','Итог'])

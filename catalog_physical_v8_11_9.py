@@ -1,5 +1,6 @@
 """Published cross-sections, linear mass and insulation for straight lengths."""
 from html import escape
+from math import isfinite
 import catalog_phase_conductor_v8_11_10 as phase
 
 PITON = ("piton", "PitON E3")
@@ -101,16 +102,48 @@ def evidence(entry):
     return f'<a href="{escape(entry["source_url"], quote=True)}">{label}</a>'
 
 
+def section_axes(entry):
+    if not entry or entry["unit"] != "мм":
+        return None, None
+    width, _, height = str(entry["value"]).partition("×")
+    return tuple({"value": int(axis), "unit": "мм"} if axis.strip().isdecimal() else None
+                 for axis in (width, height))
+
+
+def comparison_row(label, left, right, highlight=None):
+    def valid(entry, unit):
+        return (
+            entry and entry["unit"] == unit and type(entry["value"]) in (int, float)
+            and isfinite(entry["value"]) and entry["value"] > 0
+        )
+
+    display = [render_value(left), render_value(right)]
+    if highlight:
+        label_short, unit = highlight
+        if valid(left, unit) and valid(right, unit) and left["value"] != right["value"]:
+            first = left["value"] > right["value"] if label_short == "больше" else left["value"] < right["value"]
+            selected = 0 if first else 1
+            display[selected] = f'<span class="metric-highlight">{display[selected]}<small>{label_short}</small></span>'
+    return f'<tr><th scope="row">{escape(label)}</th><td>{display[0]}</td><td>{display[1]}</td></tr>'
+
+
 def comparison_markup(material, rating, phase_geometry):
     piton = VARIANTS.get((PITON, material, rating), {}) | phase_geometry.get("piton", {})
     graziadio = VARIANTS.get((GRAZIADIO, material, rating), {}) | phase_geometry.get("graziadio", {})
     if not (piton or graziadio):
         return ""
-    rows = "".join(
-        f'<tr><th scope="row">{escape(label)}</th><td>{render_value(piton.get(code))}</td>'
-        f'<td>{render_value(graziadio.get(code))}</td></tr>'
-        for code, label in LABELS.items()
-    )
+    built_rows = []
+    for code, label in LABELS.items():
+        left, right = piton.get(code), graziadio.get(code)
+        if code == "dimensions_mm":
+            for axis, piton_axis, graziadio_axis in zip(
+                ("Ширина секции (Ш)", "Высота секции (В)"), section_axes(left), section_axes(right)
+            ):
+                built_rows.append(comparison_row(axis, piton_axis, graziadio_axis, ("меньше", "мм")))
+        else:
+            highlight = ("больше", "мм²") if code == "phase_area_mm2" else None
+            built_rows.append(comparison_row(label, left, right, highlight))
+    rows = "".join(built_rows)
     notes = "".join(
         f'<li><strong>{escape(entries["dimensions_mm"]["product"])}</strong> · '
         f'{escape(entries["dimensions_mm"]["variant"])}'
