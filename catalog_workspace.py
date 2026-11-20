@@ -167,6 +167,9 @@ def public_html(handler, body):
     if path == "/":
         text = text.replace('href="/api/', 'href="/catalog/api/').replace('src="/ui.js"', 'src="/catalog/ui.js"')
         active = handler.params()["workspace"][0]
+        text = text.replace('id="compare" class="panel"', 'id="compare" class="panel hidden"', 1)
+        text = re.sub(rf'(id="{active}" class=")(panel )?hidden"',
+                      lambda match: match[1] + (match[2] or "").strip() + '"', text, count=1)
         return workspace_shell(text, active).encode()
     if path == "/matrix-v7":
         text = text.replace('action="/matrix-v7"', 'action="/catalog/"').replace('href="/api/matrix-v7.', 'href="/catalog/api/matrix-v7.')
