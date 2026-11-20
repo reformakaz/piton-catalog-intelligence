@@ -16,11 +16,11 @@ for (const tab of tabs) {
         else button.removeAttribute('aria-current');
       }
     }
-    for (const id of ['compare', 'library', 'importer', 'extractor']) {
+    for (const id of ['compare', 'library', 'characteristics']) {
       $('#' + id).classList.toggle('hidden', id !== tab.dataset.tab);
     }
     if (tab.dataset.tab === 'library') load();
-    if (tab.dataset.tab === 'extractor') loadExtractDocs();
+    if (tab.dataset.tab === 'characteristics') loadCharacteristicCatalogues();
   });
 }
 const CATALOG_TYPE_LABELS = {shp:'Шинопровод',tp:'Токопровод'};
@@ -338,70 +338,219 @@ $('#catalog-editor-form').addEventListener('submit',async event => {
 
 $('#run').addEventListener('click',async()=>{const b=$('#run');b.disabled=true;$('#compareStatus').textContent='Формирование отчёта…';try{const d=await req('/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({material:$('#material').value,rating:Number($('#rating').value)})});$('#download').innerHTML=Object.entries(d.links).map(([ext,url])=>`<a href="${url}" ${ext==='html'?'target="_blank" rel="noopener noreferrer"':'download'}>${ext.toUpperCase()} ↗</a>`).join('');$('#preview').src=d.links.html;$('#results').classList.remove('hidden');$('#compareStatus').textContent='Отчёт готов. Отсутствующие данные обозначены отдельно.';}catch(e){$('#compareStatus').textContent='Ошибка: '+e.message}finally{b.disabled=false}});
 $('#upload').addEventListener('click',async()=>{const file=$('#file').files[0],vendor=$('#vendor').value.trim(),title=$('#title').value.trim();const catalog_type=$('#catalog-type').value;if(!file||!title||!vendor||!catalog_type){$('#uploadStatus').textContent='Укажите тип, производителя, название и PDF';return}const btn=$('#upload');btn.disabled=true;$('#uploadStatus').textContent='Загрузка и индексация…';try{const q=new URLSearchParams({vendor,title,catalog_type});const d=await req('/api/upload?'+q,{method:'POST',headers:{'Content-Type':'application/pdf'},body:file});$('#uploadStatus').textContent=`Загружено: ${d.pages} страниц, текстовый слой на ${d.text_pages}. Параметры автоматически не извлечены.`;$('#file').value='';await load()}catch(e){$('#uploadStatus').textContent='Ошибка: '+e.message}finally{btn.disabled=false}});
-const initialSection = new URLSearchParams(location.search).get('workspace');
-const initialTab = Array.from(document.querySelectorAll('[data-tab]')).find(button => button.dataset.tab === initialSection);
-if (initialTab) initialTab.click();
-if (initialSection !== 'library') load();
+const char = id => $('#characteristics-' + id);
+const characteristicStages = ['source', 'review', 'save'];
+const characteristicStates = {
+  new: 'Новая запись', changed: 'Изменит запись', same: 'Уже в базе',
+  missing: 'Нет значения', conflict: 'Занято другим каталогом', edited: 'Значение изменено',
+};
+let characteristics = null;
 
-let validatedBytes=null;
-$('#specfile').addEventListener('change',()=>{validatedBytes=null;$('#specApply').disabled=true;$('#specStatus').textContent='CSV выбран. Нажмите «Проверить CSV».'});
-$('#specPreview').addEventListener('click',async()=>{const f=$('#specfile').files[0];if(!f){$('#specStatus').textContent='Выберите файл CSV';return}$('#specApply').disabled=true;validatedBytes=null;try{const bytes=await f.arrayBuffer();const d=await req('/api/spec-import?apply=0',{method:'POST',headers:{'Content-Type':'text/csv'},body:bytes});$('#specStatus').textContent=d.ok?`Проверено: ${d.rows} ${d.kind==='phase'?'значений':'строк'}, новых ${d.new}, без изменений ${d.same}, изменяемых ${d.changed}. ${d.warning}`:`Найдены ошибки: ${JSON.stringify(d.errors)}`;if(d.ok){validatedBytes=bytes;$('#specApply').disabled=false}}catch(e){$('#specStatus').textContent='Ошибка: '+e.message}});
-$('#specApply').addEventListener('click',async()=>{if(!validatedBytes)return;const b=$('#specApply');b.disabled=true;try{const d=await req('/api/spec-import?apply=1',{method:'POST',headers:{'Content-Type':'text/csv'},body:validatedBytes});$('#specStatus').textContent=d.ok?`Записано ${d.rows} ${d.kind==='phase'?'значений':'строк'}. Новых ${d.new}, изменено ${d.changed}. Теперь откройте «Сравнение».`:'Ошибка: '+JSON.stringify(d.errors);validatedBytes=null;await load()}catch(e){$('#specStatus').textContent='Ошибка: '+e.message}});
-
-// PITON_CATALOG_EXTRACT_V4 — preview and explicit CSV review before commit.
-let proposed=[], approvedBytes=null;
-async function loadExtractDocs(){const d=await req('/api/library');$('#extractDoc').innerHTML=d.documents.map(x=>`<option value="${esc(x.id)}">${esc(x.title||x.id)} (${esc(x.pages)} стр.)</option>`).join('')}
-$('#extractStart').addEventListener('click',async()=>{approvedBytes=null;$('#extractActions').classList.add('hidden');$('#extractStatus').textContent='Анализ PDF…';try{let d=await req('/api/extract-v4?document='+encodeURIComponent($('#extractDoc').value));proposed=d.proposals;$('#extractStatus').textContent=`Найдено ${proposed.length} значений; таблиц: ${d.tables.length}. ${d.scan_note}`;if(proposed.length){$('#extractRows').innerHTML=proposed.map((x,i)=>`<tr><td><input type="checkbox" class="extractPick" data-i="${i}" checked></td><td>${esc(x.material)}</td><td>${esc(x.rating_a)} А</td><td>${esc(x.parameter)}</td><td>${esc(x.value)} ${esc(x.unit)}</td><td><a href="${api('/api/pdf/'+encodeURIComponent(d.document.id))}#page=${x.page}" target="_blank" rel="noopener">PDF стр. ${x.page} ↗</a></td></tr>`).join('');$('#extractActions').classList.remove('hidden')}}catch(e){$('#extractStatus').textContent='Ошибка: '+e.message}});
-$('#extractAll').addEventListener('change',e=>{document.querySelectorAll('.extractPick').forEach(x=>x.checked=e.target.checked);approvedBytes=null;$('#extractApply').disabled=true});
-$('#extractRows').addEventListener('change',()=>{approvedBytes=null;$('#extractApply').disabled=true});
-// PITON_OCR_EDITABLE_V5_3: the visible user-verified value is the only value imported.
-function ocrReadEditedRows(){
- for(const row of document.querySelectorAll('#extractRows tr[data-ocr-row]')){
-  const i=Number(row.dataset.ocrRow), input=row.querySelector('input.ocrValue');
-  if(!input||!proposed[i])continue;
-  const raw=input.value.trim().replace(',','.');
-  if(!raw){proposed[i].value=null;continue;}
-  if(!/^(?:\d+)(?:\.\d+)?$/.test(raw))throw Error('Недопустимое число для '+proposed[i].rating_a+' A, '+proposed[i].parameter);
-  const value=Number(raw),key=proposed[i].parameter;
-  const limits={nominal_voltage_v:[100,2000],icw_1s_ka:[10,500],ipk_ka:[20,1000],r20_mohm_m:[0.0001,0.5]};
-  const [lo,hi]=limits[key]||[0,1e8];
-  if(!Number.isFinite(value)||value<lo||value>hi)throw Error('Значение вне допустимого диапазона: '+proposed[i].rating_a+' A, '+key);
-  proposed[i].value=value;
- }
+function characteristicsMessage(message = '') {
+  char('message').textContent = message;
+  char('message').hidden = !message;
 }
-function makeCSV(){ocrReadEditedRows();const selected=[...document.querySelectorAll('.extractPick:checked')].map(x=>proposed[Number(x.dataset.i)]);if(!selected.length)throw Error('Не выбраны характеристики');if(selected.some(x=>x.value===null||x.value===undefined))throw Error('У выбранной строки пустое значение. Сверьте с PDF и введите число.');const fields=['vendor','product','material','rating_a','parameter','value','unit','source','status'];function field(v){return '"'+String(v??'').replaceAll('"','""')+'"'}return new TextEncoder().encode(fields.join(';')+'\n'+selected.map(x=>fields.map(f=>field(x[f])).join(';')).join('\n')+'\n')}
-$('#extractCheck').addEventListener('click',async()=>{try{approvedBytes=makeCSV();const d=await req('/api/spec-import?apply=0',{method:'POST',headers:{'Content-Type':'text/csv'},body:approvedBytes});$('#extractStatus').textContent=d.ok?`Проверено ${d.rows} характеристик: новых ${d.new}, изменяемых ${d.changed}, без изменений ${d.same}. Внимание: это не автоматическая инженерная верификация.`:JSON.stringify(d.errors);$('#extractApply').disabled=!d.ok;if(!d.ok)approvedBytes=null}catch(e){$('#extractStatus').textContent='Ошибка: '+e.message}});
-$('#extractApply').addEventListener('click',async()=>{if(!approvedBytes)return;$('#extractApply').disabled=true;try{const d=await req('/api/spec-import?apply=1',{method:'POST',headers:{'Content-Type':'text/csv'},body:approvedBytes});$('#extractStatus').textContent=d.ok?`Импортировано ${d.rows} значений со статусом manual_review. Перед использованием у заказчика требуется подтверждение инженера.`:JSON.stringify(d.errors);approvedBytes=null;await load()}catch(e){$('#extractStatus').textContent='Ошибка: '+e.message}});
 
-// PITON_CATALOG_SCAN_V6: four known tables, never auto-import.
-$('#scanStart').addEventListener('click',async()=>{
- approvedBytes=null;$('#extractApply').disabled=true;$('#extractActions').classList.add('hidden');
- $('#extractStatus').textContent='OCR обрабатывает таблицы PitON E3 на страницах PDF 60–63. Подождите…';
- const b=$('#scanStart');b.disabled=true;
- try {
-  const d=await req('/api/scan-v6?document='+encodeURIComponent($('#extractDoc').value));
-  proposed=d.proposals||[];
-  $('#extractStatus').textContent=`OCR: найдено ${proposed.length} характеристик; пропущено ${(d.rejected||[]).length}. ${d.note}`;
-  // Include rejected OCR cells as empty manual proposals. Never infer a missing number.
-  const existing=new Set(proposed.map(x=>x.material+'|'+x.rating_a+'|'+x.parameter));
-  for(const miss of d.rejected||[]){
-    const code=miss.material+'|'+miss.rating_a+'|'+miss.parameter;
-    if(existing.has(code))continue;
-    const unit={nominal_voltage_v:'V',icw_1s_ka:'kA',ipk_ka:'kA',r20_mohm_m:'mΩ/m'}[miss.parameter];
-    if(!unit)continue;
-    existing.add(code);
-    proposed.push({vendor:'piton',product:'PitON E3',material:miss.material,rating_a:miss.rating_a,
-      parameter:miss.parameter,value:null,unit,source:d.document.title+', PDF стр. '+miss.page+', восстановлено вручную по оригиналу',
-      status:'manual_review',page:miss.page,manual:true});
+function characteristicsStage(stage) {
+  characteristicStages.forEach((name, index) => {
+    char(name).hidden = name !== stage;
+    const step = document.querySelectorAll('.characteristics-steps li')[index];
+    if (name === stage) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+  });
+  characteristicsMessage();
+}
+
+function characteristicsSource() {
+  const csv = $('input[name="characteristics-method"]:checked').value === 'csv';
+  const document = char('document').value;
+  char('csv').hidden = !csv;
+  char('pdf-help').hidden = csv;
+  char('prepare').textContent = csv ? 'Проверить файл' : 'Извлечь характеристики';
+  char('templates').hidden = !document;
+  for (const [id, kind] of [['standard-template', 'electrical'], ['phase-template', 'phase']]) {
+    char(id).href = api('/api/characteristics-template?' + new URLSearchParams({document, kind}));
   }
-  if(proposed.length){
-   $('#extractRows').innerHTML=proposed.map((x,i)=>`<tr data-ocr-row="${i}"><td><input type="checkbox" class="extractPick" data-i="${i}"></td><td>${esc(x.material)}</td><td>${esc(x.rating_a)} А</td><td>${esc(x.parameter)}</td><td><input class="ocrValue" type="text" inputmode="decimal" aria-label="${esc(x.parameter)} ${esc(x.rating_a)} А" value="${x.value===null?'':esc(x.value)}" placeholder="Сверьте с PDF" style="min-width:110px;width:130px;${x.manual?'border-color:#cc8530;background:#fff7e6;':''}"> ${esc(x.unit)}${x.manual?' <small style="color:#996316">пропущено OCR</small>':''}</td><td><a href="${api('/api/pdf/'+encodeURIComponent(d.document.id))}#page=${x.page}" target="_blank" rel="noopener">PDF стр. ${x.page} ↗</a></td></tr>`).join('');
-   $('#extractAll').checked=false;$('#extractActions').classList.remove('hidden');
-   $('#extractStatus').textContent+=` Показано ${proposed.length} строк, включая пустые для исправления. Все флажки сняты.`;
+}
+
+async function loadCharacteristicCatalogues() {
+  if (characteristics) return;
+  try {
+    const result = await req('/api/catalog-types');
+    const select = char('document');
+    const previous = select.value;
+    select.length = 1;
+    for (const row of result.catalogues) {
+      if (!row.comparison_type || !row.spec_product || !row.spec_vendor) continue;
+      const option = document.createElement('option');
+      option.value = row.document_id;
+      option.textContent = row.title + ' · ' + CATALOG_TYPE_LABELS[row.comparison_type];
+      select.add(option);
+    }
+    if ([...select.options].some(option => option.value === previous)) select.value = previous;
+    if (select.options.length === 1) characteristicsMessage('Укажите производителя и тип каталога в библиотеке.');
+    characteristicsSource();
+  } catch (error) {
+    characteristicsMessage(error.message);
   }
- }catch(e){$('#extractStatus').textContent='Ошибка OCR: '+e.message}
- finally{b.disabled=false}
+}
+
+function characteristicsRequest(action, document, body, type = 'application/json') {
+  const query = new URLSearchParams({action, document});
+  return req('/api/characteristics?' + query, {
+    method: 'POST', headers: {'Content-Type': type}, body,
+  });
+}
+
+function characteristicsSelection() {
+  const count = char('rows').querySelectorAll('input[type=checkbox]:checked').length;
+  char('selection').textContent = 'К сохранению выбрано: ' + count;
+  char('confirm').disabled = !count;
+}
+
+function filterCharacteristics() {
+  const active = char('filter').getAttribute('aria-pressed') === 'true';
+  char('filter').textContent = active ? 'Показать все строки' : 'Только требуют внимания';
+  for (const row of char('rows').rows) row.hidden = active && ['same', 'new'].includes(row.dataset.state);
+}
+
+function renderCharacteristics() {
+  char('rows').innerHTML = characteristics.rows.map((row, index) => {
+    const label = catalogueParameters[row.parameter] || specColumns.get(row.parameter) || row.parameter;
+    const locked = row.state === 'conflict';
+    const source = row.page
+      ? '<a href="' + api('/api/pdf/' + encodeURIComponent(characteristics.document)) + '#page=' + row.page +
+        '" target="_blank" rel="noopener">PDF, стр. ' + row.page + ' ↗</a>'
+      : esc(row.source);
+    const current = row.current == null ? '' : '<small>В базе: ' + esc(String(row.current).replace('.', ',')) + ' ' + esc(row.unit) + '</small>';
+    return '<tr data-index="' + index + '" data-state="' + esc(row.state) + '">' +
+      '<td><input type="checkbox" aria-label="Выбрать ' + esc(label) + '"' +
+      (row.state === 'new' ? ' checked' : '') + (['missing','conflict','same'].includes(row.state) ? ' disabled' : '') + '></td>' +
+      '<td>' + esc(row.material) + ' · ' + esc(row.rating_a) + ' А</td><td>' + esc(label) + '</td>' +
+      '<td><input type="text" class="characteristics-value" inputmode="decimal" maxlength="20" aria-label="' +
+      esc(label + ' · ' + row.material + ' ' + row.rating_a + ' А') + '" value="' +
+      esc(String(row.value ?? '').replace('.', ',')) + '"' + (locked ? ' readonly' : '') + '> ' + esc(row.unit) + current + '</td>' +
+      '<td>' + source + '</td><td><span class="characteristics-state characteristics-state-' + esc(row.state) + '">' +
+      esc(characteristicStates[row.state]) + '</span></td></tr>';
+  }).join('');
+  char('filter').setAttribute('aria-pressed', 'false');
+  filterCharacteristics();
+  characteristicsSelection();
+}
+
+char('document').addEventListener('change', characteristicsSource);
+document.querySelectorAll('input[name="characteristics-method"]').forEach(
+  input => input.addEventListener('change', characteristicsSource),
+);
+char('prepare').addEventListener('click', async () => {
+  const target = char('document');
+  const documentId = target.value;
+  const mode = $('input[name="characteristics-method"]:checked').value;
+  const file = char('file').files[0];
+  if (!documentId || (mode === 'csv' && !file)) {
+    characteristicsMessage(!documentId ? 'Выберите каталог.' : 'Выберите файл CSV.');
+    return;
+  }
+  char('prepare').disabled = true;
+  characteristicsMessage(mode === 'csv' ? 'Проверяем CSV…' : 'Извлекаем значения из PDF…');
+  try {
+    const result = await characteristicsRequest(mode, documentId, mode === 'csv' ? file : '{}',
+      mode === 'csv' ? 'text/csv' : 'application/json');
+    const title = [...target.options].find(option => option.value === documentId)?.textContent || 'Каталог';
+    characteristics = {document: documentId, rows: result.rows};
+    document.querySelectorAll('.characteristics-context').forEach(context => {
+      context.textContent = title + ' · ' + (mode === 'csv' ? file.name : 'PDF из библиотеки');
+    });
+    renderCharacteristics();
+    characteristicsStage('review');
+  } catch (error) {
+    characteristicsMessage(error.message);
+  } finally {
+    char('prepare').disabled = false;
+  }
 });
 
-// PITON_OCR_EDITABLE_V5_3 invalidate preview when any value is edited.
-$('#extractRows').addEventListener('input',e=>{if(e.target.classList.contains('ocrValue')){approvedBytes=null;$('#extractApply').disabled=true;$('#extractStatus').textContent='Значение изменено. Сверьте с PDF, выберите строки и повторите «Проверить выбранное».';}});
+char('rows').addEventListener('change', event => {
+  if (event.target.type === 'checkbox') characteristicsSelection();
+});
+char('rows').addEventListener('input', event => {
+  if (!event.target.matches('.characteristics-value')) return;
+  const tr = event.target.closest('tr');
+  const row = characteristics.rows[Number(tr.dataset.index)];
+  row.value = event.target.value.trim();
+  if (row.status !== 'source_document') row.status = 'manual_review';
+  tr.dataset.state = row.value ? 'edited' : 'missing';
+  const state = tr.querySelector('.characteristics-state');
+  state.className = 'characteristics-state characteristics-state-' + tr.dataset.state;
+  state.textContent = characteristicStates[tr.dataset.state];
+  const checkbox = tr.querySelector('input[type=checkbox]');
+  checkbox.disabled = !row.value;
+  if (!row.value) checkbox.checked = false;
+  characteristicsSelection();
+});
+char('filter').addEventListener('click', () => {
+  char('filter').setAttribute('aria-pressed', String(char('filter').getAttribute('aria-pressed') === 'false'));
+  filterCharacteristics();
+});
+char('back-source').addEventListener('click', () => {
+  characteristics = null;
+  characteristicsStage('source');
+});
+char('back-review').addEventListener('click', () => characteristicsStage('review'));
+char('reset').addEventListener('click', () => {
+  characteristics = null;
+  char('file').value = '';
+  characteristicsStage('source');
+});
+function showCharacteristicCounts(data, total, saved) {
+  const items = [
+    [data.new, saved ? 'Добавлено' : 'Новые записи'],
+    [data.changed, saved ? 'Обновлено' : 'Будут обновлены'],
+    [total - data.new - data.changed, 'Пропущено'],
+  ];
+  char('counts').innerHTML = items.map(([n, title]) => '<span><strong>' + n + '</strong>' + title + '</span>').join('');
+  char('confirm-title').textContent = saved ? 'Характеристики сохранены' : 'Подтвердите сохранение';
+  char('back-review').hidden = saved;
+  char('reset').hidden = !saved;
+  char('apply').hidden = saved;
+  char('apply').disabled = saved || data.new + data.changed === 0;
+}
+char('confirm').addEventListener('click', async () => {
+  const job = characteristics;
+  const rows = [...char('rows').querySelectorAll('input[type=checkbox]:checked')]
+    .map(box => ({...job.rows[Number(box.closest('tr').dataset.index)]}));
+  char('confirm').disabled = true;
+  char('back-source').disabled = true;
+  characteristicsMessage('Проверяем выбранные строки…');
+  try {
+    const result = await characteristicsRequest('confirm', job.document, JSON.stringify({rows}));
+    job.confirmed = {rows, digest: result.digest};
+    showCharacteristicCounts(result, job.rows.length, false);
+    characteristicsStage('save');
+  } catch (error) {
+    characteristicsMessage(error.message);
+  } finally {
+    characteristicsSelection();
+    char('back-source').disabled = false;
+  }
+});
+char('apply').addEventListener('click', async () => {
+  const job = characteristics;
+  char('apply').disabled = true;
+  char('back-review').disabled = true;
+  characteristicsMessage('Сохраняем характеристики…');
+  try {
+    const result = await characteristicsRequest('save', job.document, JSON.stringify(job.confirmed));
+    showCharacteristicCounts(result, job.rows.length, true);
+    characteristicsMessage();
+  } catch (error) {
+    characteristicsMessage(error.message);
+  } finally {
+    char('back-review').disabled = false;
+  }
+});
+characteristicsStage('source');
+const initialSection = new URLSearchParams(location.search).get('workspace');
+const initialTab = Array.from(tabs).find(button => button.dataset.tab === initialSection);
+if (initialTab) initialTab.click();
+if (initialSection !== 'library') load();
