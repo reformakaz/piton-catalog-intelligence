@@ -1,0 +1,115 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PitON | Catalog Intelligence</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f0f4f8;color:#213547;font:14px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}main{max-width:1250px;margin:auto;padding:28px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}header h1{font-size:25px;margin:0;letter-spacing:-.6px}header small{color:#64748b}nav{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid #dce5eb}nav button{background:none;color:#577082;border:0;border-bottom:3px solid transparent;border-radius:0}nav button.active{border-color:#06a0da;color:#007daf}button{background:#139ed4;color:white;border:0;border-radius:7px;padding:10px 16px;cursor:pointer;font:inherit;font-weight:600}button:disabled{opacity:.55;cursor:wait}input,select{border:1px solid #cbd9e5;padding:10px;border-radius:7px;background:white;color:#23384a;font:inherit;width:100%}label{display:block;font-weight:600;font-size:12px;color:#61798a;margin-bottom:6px}.panel{background:white;border:1px solid #e0e8ef;border-radius:12px;padding:24px;margin:0 0 16px;box-shadow:0 3px 9px #1f354308}h2{font-size:19px;margin:0 0 6px}p{margin:0 0 18px;color:#697e8e}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.muted{color:#73879a}.kpi{font-size:26px;font-weight:700}.badge{display:inline-block;background:#edf5fa;color:#36677f;font-size:11px;padding:3px 8px;border-radius:6px}table{border-collapse:collapse;width:100%}td,th{padding:11px;text-align:left;border-bottom:1px solid #e8edf3;vertical-align:top}th{background:#f7fafc;color:#4d6679}a{color:#087da8}details{margin-top:10px}.links{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}.status{padding:10px 12px;background:#eef6f9;border-radius:7px;margin:12px 0;white-space:pre-wrap}.warning{background:#fff7e5;border-left:3px solid #db9b2c;padding:12px;margin-bottom:16px;color:#715b37}.hidden{display:none}.space{height:8px}@media(max-width:700px){main{padding:12px}.panel{padding:15px}header{display:block}}
+#library input,#library select,#library button{min-height:36px;line-height:1.35}
+main:has(> #library:not(.hidden)){max-width:none}
+#library .catalog-upload-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px;margin:0 0 12px}
+#library .catalog-upload-file{grid-column:span 2}
+#catalog-library #libStats{display:flex;flex-wrap:wrap;gap:8px 16px;margin:4px 0 12px}
+#catalog-library #libStats .status{margin:0;padding:5px 9px}
+#catalog-library .catalog-table-scroll{overflow-x:auto}
+#catalog-library .catalog-table-scroll table{min-width:550px}
+#catalog-library td:first-child{overflow-wrap:anywhere}
+#catalog-library th:first-child{width:39%}
+#catalog-library th:last-child{width:215px}
+#catalog-library .catalog-row-actions{display:flex;align-items:center;gap:7px 13px;flex-wrap:wrap}
+#library .catalog-secondary{background:#fff;color:#087da8;border:1px solid #cbd9e5}
+#library .catalog-edit-button{padding:6px 10px;width:130px;max-width:100%}
+#catalog-editor{position:fixed;inset:0;margin:auto;width:540px;max-width:calc(100% - 32px);max-height:calc(100% - 32px);padding:24px;overflow:auto;border:1px solid #cbd9e5;border-radius:12px;background:#fff;color:#213547;box-shadow:0 14px 50px #102a4340}
+#catalog-editor:not([open]),#library [hidden]{display:none}
+#catalog-editor::backdrop{background:#253b5080}
+#catalog-editor label{margin-top:12px}
+#catalog-editor .catalog-editor-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:18px}
+#catalog-editor .catalog-editor-actions button{width:210px;max-width:100%}
+#catalog-editor #catalog-editor-cancel{width:96px}
+@media(max-width:900px){#library .catalog-upload-fields{grid-template-columns:repeat(2,minmax(0,1fr))}#library .catalog-upload-file{grid-column:auto}}
+@media(max-width:560px){#library .catalog-upload-fields{grid-template-columns:1fr}#catalog-editor{padding:16px}}
+#catalog-library > .catalog-table-scroll > table > thead th:first-child{width:33%}
+#catalog-library > .catalog-table-scroll > table > thead th:last-child{width:412px}
+#catalog-library .catalog-row-actions{display:grid;grid-template-columns:repeat(3,minmax(116px,1fr));min-width:368px;gap:10px}
+#catalog-library .catalog-row-actions > .catalog-secondary{display:block;width:100%;height:36px;padding:0 4px;border-radius:8px;font:600 12.5px/34px system-ui,sans-serif;text-align:center;text-decoration:none;white-space:nowrap}
+#catalog-library .catalog-row-actions > .catalog-secondary:hover,#catalog-library .catalog-row-actions > [aria-expanded="true"]{background:#eef7fb;border-color:#95b9cb}
+#catalog-library .catalog-row-actions > .catalog-secondary:focus-visible{outline:2px solid #087da8;outline-offset:2px}
+#catalog-library .catalog-spec-details > td{padding:16px;background:#f7fafc}
+#catalog-library .catalog-spec-details h3{margin:0 0 12px;font-size:16px}
+#catalog-library .catalog-spec-note{margin:0;color:#50697c}
+#catalog-library .catalog-spec-filters{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:12px;margin-bottom:14px}
+#catalog-library .catalog-spec-scroll{overflow-x:auto;background:#fff;border:1px solid #e0e8ef;border-radius:8px}
+#catalog-library table.catalog-spec-table{min-width:620px}
+#catalog-library .catalog-spec-table th:first-child,#catalog-library .catalog-spec-table th:last-child{width:auto}
+#catalog-library .catalog-spec-table td:nth-child(5){max-width:320px;overflow-wrap:anywhere}
+#catalog-library .catalog-spec-actions{margin-top:14px;display:flex;justify-content:flex-end}
+#catalog-library .catalog-spec-actions button{max-width:100%}
+@media(max-width:1260px){
+  #catalog-library > .catalog-table-scroll > table > thead th:last-child{width:155px}
+  #catalog-library .catalog-row-actions{grid-template-columns:1fr;min-width:116px;gap:8px}
+}
+#catalog-library > .catalog-table-scroll > table{table-layout:fixed}
+#catalog-library .catalog-spec-filters{grid-template-columns:repeat(2,minmax(125px,200px)) auto;align-items:end}
+#catalog-library .catalog-spec-column-picker{position:relative;width:106px;justify-self:start}
+#catalog-library .catalog-spec-column-picker summary{padding:7px 12px;min-height:36px;border:1px solid #cbd9e5;border-radius:7px;background:#fff;color:#087da8;cursor:pointer;font-weight:600}
+#catalog-library .catalog-spec-column-picker:not([open]) .catalog-spec-column-options{display:none}
+#catalog-library .catalog-spec-column-options{position:absolute;top:calc(100% + 5px);left:0;z-index:2;min-width:211px;padding:9px 13px;border:1px solid #cbd9e5;border-radius:7px;background:#fff;box-shadow:0 4px 14px #29435b22}
+#catalog-library .catalog-spec-column-options label{display:flex;align-items:center;gap:7px;line-height:1.3;min-height:27px;white-space:nowrap}
+#catalog-library .catalog-spec-column-options input{width:15px;height:15px;min-height:0;padding:0;margin:0;accent-color:#087da8}
+#catalog-library table.catalog-spec-table{width:100%;min-width:var(--catalog-spec-min-width,780px);word-break:normal}
+#catalog-library .catalog-spec-table thead th{width:auto;font-size:13px;line-height:1.25;white-space:nowrap}
+#catalog-library .catalog-spec-table thead th:first-child,#catalog-library .catalog-spec-table thead th:nth-child(2){width:85px}
+#catalog-library .catalog-spec-table tbody th{background:#fff;color:inherit;font-weight:600;white-space:nowrap}
+#catalog-library .catalog-spec-table tbody th small,#catalog-library .catalog-spec-table tbody td small{display:block;font-size:11px;white-space:normal}
+#catalog-library .catalog-spec-table td{font-variant-numeric:tabular-nums;font-size:13px}
+#catalog-library .catalog-spec-table td.catalog-spec-service{min-width:125px;max-width:280px}
+#catalog-library .catalog-spec-variant,#catalog-library .catalog-spec-legend{color:#50697c;margin:0 0 9px;font-size:12px}
+#catalog-library .catalog-spec-legend{margin:7px 0 0}
+#catalog-library .catalog-spec-review,#catalog-library .catalog-spec-conflict{color:#825319}
+#catalog-library .catalog-spec-empty{color:#7b8b98}
+@media(max-width:680px){
+  #catalog-library .catalog-spec-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #catalog-library .catalog-spec-column-picker{grid-column:1/-1}
+}
+</style></head><body><main><header><div><h1>PitON <span style="color:#079cd0">Catalog Intelligence</span></h1><small>Сравнение технических каталогов • v6</small></div><span class="badge">Локальный доступ через SSH</span></header><nav><button class="active" data-tab="compare">Сравнение</button><button data-tab="library">Библиотека каталогов</button><button data-tab="importer">Импорт характеристик</button><button data-tab="extractor">Извлечение из PDF</button></nav>
+<section id="compare" class="panel"><h2>Сравнение оборудования</h2><p>Пилотная база характеристик PitON E3 и Graziadio ISOLSBARRA. Значения из сканированного каталога требуют инженерной проверки.</p><div class="warning">Сейчас автоматизировано сопоставление характеристик, внесённых в базу v1. Новые PDF загружаются в библиотеку, но их технические таблицы пока не распознаются автоматически.</div><div class="grid"><div><label for="material">Материал проводника</label><select id="material"><option value="Cu">Медь (Cu)</option><option value="Al">Алюминий (Al)</option></select></div><div><label for="rating">Номинальный ток</label><select id="rating"><option>4000</option><option>630</option><option>800</option><option>1000</option><option>1250</option><option>1600</option><option>2000</option><option>2500</option><option>3200</option><option>5000</option><option>6300</option><option>6400</option></select></div><div style="align-self:end"><button id="run">Сформировать сравнение</button></div></div><div id="compareStatus" class="status muted">Готов к анализу.</div><div id="results" class="hidden"><div class="links" id="download"></div><iframe id="preview" title="Предпросмотр отчёта" style="height:700px;width:100%;border:1px solid #e5ecf2;border-radius:8px"></iframe></div></section>
+<section id="library" class="hidden">
+  <section class="panel" id="catalog-upload">
+    <h2>Добавить каталог</h2>
+    <p>PDF до 80 МБ и 500 страниц. Индексация отмечает наличие текстового слоя.</p>
+    <div class="catalog-upload-fields">
+      <div><label for="title">Название каталога</label><input id="title" placeholder="Название, версия и дата"></div>
+      <div><label for="vendor">Код производителя</label><input id="vendor"></div>
+      <div><label for="catalog-type">Тип каталога</label><select id="catalog-type" required><option value="">Выберите тип</option><option value="shp">Шинопровод</option><option value="tp">Токопровод</option></select></div>
+      <div class="catalog-upload-file"><label for="file">PDF-файл</label><input id="file" type="file" accept="application/pdf,.pdf"></div>
+    </div>
+    <button id="upload" type="button">Загрузить каталог</button>
+    <div id="uploadStatus" class="status muted" role="status">Ожидание файла.</div>
+  </section>
+
+  <section class="panel" id="catalog-library">
+    <h2>Библиотека PDF</h2>
+    <div id="libStats" class="grid"></div>
+    <div id="catalog-library-status" class="status" role="status" hidden></div>
+    <div class="catalog-table-scroll" tabindex="0" role="region" aria-label="Список каталогов">
+      <table>
+        <thead><tr><th scope="col">Каталог</th><th scope="col">Тип</th><th scope="col">Страницы</th><th scope="col">Текстовый слой</th><th scope="col">Действия</th></tr></thead>
+        <tbody id="docs"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <dialog id="catalog-editor" aria-labelledby="catalog-editor-heading">
+    <h2 id="catalog-editor-heading">Редактирование каталога</h2>
+    <form id="catalog-editor-form">
+      <label for="catalog-existing-title">Название каталога</label>
+      <input id="catalog-existing-title" maxlength="140" autofocus>
+      <label for="catalog-existing-type">Тип каталога</label>
+      <select id="catalog-existing-type"><option value="">Тип не указан</option><option value="shp">Шинопровод</option><option value="tp">Токопровод</option></select>
+      <label for="catalog-existing-vendor">Код производителя</label>
+      <input id="catalog-existing-vendor" maxlength="100">
+      <div id="catalog-type-status" class="status" role="status" hidden></div>
+      <div class="catalog-editor-actions">
+        <button id="catalog-editor-cancel" class="catalog-secondary" type="button">Отмена</button>
+        <button id="catalog-save-type" type="submit">Сохранить изменения</button>
+      </div>
+    </form>
+  </dialog>
+</section>
+
+<section id="importer" class="panel hidden"><h2>Импорт характеристик</h2><p>Загрузите CSV UTF-8 с разделителем «;». Сначала выполните предварительную проверку, затем подтвердите запись в базу. Исходные PDF остаются без изменений.</p><p><a href="/api/spec-template">Скачать шаблон CSV</a></p><p><a href="/api/spec-template?phase=1">Шаблон CSV «Сечение и размеры шины»</a>. Заполните известные значения и укажите каталог или чертёж с номером листа.</p><label for="specfile">CSV с проверенными параметрами</label><input type="file" accept=".csv,text/csv" id="specfile"><div class="space"></div><button id="specPreview">Проверить CSV</button> <button id="specApply" disabled>Импортировать в базу</button><div id="specStatus" class="status">Ожидание CSV</div><p class="warning">Источники должны содержать название каталога и номер страницы. Статус engineer_verified обозначает заявление пользователя, а не независимую проверку системой.</p></section><section id="extractor" class="panel hidden"><h2>Извлечение характеристик из PDF</h2><p>Выберите документ, выполните анализ таблиц и проверьте извлечённые значения перед импортом. Для графических PDF поддерживается OCR технических таблиц PitON E3: PDF страницы 60–63 (Al и Cu, 400–6400 А).</p><div class="grid"><div><label for="extractDoc">Каталог</label><select id="extractDoc"></select></div><div style="align-self:end"><button id="extractStart">Анализировать PDF</button> <button id="scanStart" style="background:#167664">OCR PitON E3 (стр. 60–63)</button></div></div><div id="extractStatus" class="status">Выберите каталог.</div><div id="extractActions" class="hidden"><p class="warning">Изменяйте числовые значения прямо в таблице. Пустые строки — это пропуски OCR, их надо заполнить вручную после сверки с PDF. Все значения имеют статус «Требует проверки». Перед импортом сверяйте с оригинальной страницей. Подтверждение применяет все выбранные значения и может обновить существующие записи.</p><div class="links"><button id="extractCheck">Проверить выбранное</button><button id="extractApply" disabled>Подтвердить и импортировать выбранное</button></div><div style="overflow:auto;max-height:560px"><table><thead><tr><th><input type="checkbox" id="extractAll" checked aria-label="Выбрать всё"></th><th>Материал</th><th>Ток</th><th>Параметр</th><th>Значение</th><th>Источник</th></tr></thead><tbody id="extractRows"></tbody></table></div></div></section><footer class="muted">OCR v6 — редактирование и подтверждение: только проверенные структуры страниц, с обязательной сверкой каждого значения. Внутренняя инженерная аналитика. Отсутствие параметра в каталоге не является недостатком оборудования. Документы не передаются внешним AI-сервисам.</footer></main><script src="/ui.js"></script></body></html>
