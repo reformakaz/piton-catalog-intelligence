@@ -1,7 +1,7 @@
 """PitON Catalog Intelligence v7: read-only product comparison matrix."""
 import csv,html,io,json,re,sqlite3
 from collections import defaultdict
-from catalog_engine import COMPARISON_FILTER, COMPARISON_FILTER_PARAMS
+from catalog_engine import COMPARISON_FILTER, COMPARISON_FILTER_PARAMS, PITON_PRODUCTS
 
 PARAMS={
  'nominal_voltage_v':('Напряжение изоляции','equal','V'),
@@ -40,7 +40,7 @@ def unconfirmed_ipk_page(detail):
 def confirmed_ipk_source(detail):
     entry = detail.get("piton")
     page = piton_ipk_page(detail)
-    if not page or entry.get("product") != "PitON E3":
+    if not page or entry.get("product") not in PITON_PRODUCTS:
         return None
     table = IPK_EN_TABLES.get((entry["material"], page))
     if not table:
@@ -54,7 +54,7 @@ def confirmed_ipk_source(detail):
 def icw_catalog_conflict(detail):
     entry = detail.get("piton")
     if (detail["code"] != "icw_1s_ka" or not entry
-            or entry["product"] != "PitON E3" or entry["material"] != "Cu"):
+            or entry["product"] not in PITON_PRODUCTS or entry["material"] != "Cu"):
         return None
     values = ICW_CU_EDITIONS.get(entry["rating_a"])
     source = entry.get("source") or ""

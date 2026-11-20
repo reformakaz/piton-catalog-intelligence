@@ -13,10 +13,26 @@ from urllib.request import ProxyHandler, Request, build_opener
 
 import catalog_engine
 import catalog_types_v8_11 as catalog_types
+import matrix_v7
 import web
 
 
 class WebReportTest(unittest.TestCase):
+    def test_matrix_evidence_accepts_both_piton_names(self):
+        for name in ('PitON E3', 'PitON Electric E3'):
+            with self.subTest(product=name):
+                entry = {
+                    'product': name, 'material': 'Cu', 'rating_a': 800,
+                    'value': 73.5, 'source': 'PDF стр. 62',
+                }
+                self.assertEqual(
+                    matrix_v7.confirmed_ipk_source({'code': 'ipk_ka', 'piton': entry}),
+                    f"{matrix_v7.IPK_EN_PDF}#page=52",
+                )
+                conflict = matrix_v7.icw_catalog_conflict({'code': 'icw_1s_ka', 'piton': entry})
+                self.assertIsNotNone(conflict)
+                self.assertEqual((conflict['ru']['value'], conflict['en']['value']), (25, 35))
+
     def test_confirmed_pair_accepts_both_piton_names(self):
         for names in (
             ('PitON E3',) * 4,
