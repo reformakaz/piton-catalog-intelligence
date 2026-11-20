@@ -112,7 +112,7 @@ def section_area(entry):
     if not width.isdecimal() or not height.isdecimal():
         return None
     area = int(width) * int(height)
-    return {"value": area, "unit": "мм²"} if area > 0 else None
+    return {"value": area / 100, "unit": "см²"} if area > 0 else None
 
 
 def comparison_row(label, left, right, highlight=None, prefer_compound=False):
@@ -148,7 +148,7 @@ def comparison_markup(material, rating, phase_geometry):
         if code == "dimensions_mm":
             built_rows.append(comparison_row(
                 "Площадь габаритного сечения секции (Ш × В)",
-                section_area(left), section_area(right), ("меньше", "мм²"),
+                section_area(left), section_area(right), ("меньше", "см²"),
             ))
         else:
             highlight = {"phase_area_mm2": ("больше", "мм²"), "mass_kg_m": ("меньше", "кг/м")}.get(code)
