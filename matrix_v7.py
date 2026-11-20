@@ -59,12 +59,12 @@ def catalog_tabs(active):
  return '<nav class="catalog-tabs screen" aria-label="Каталоги PitON">' + "".join(links) + '</nav>'
 
 
-def matrix_tab(content):
+def matrix_tab(content, *, extra_css=""):
  primary_ui = Path(__file__).with_name("ui.html").read_text(encoding="utf-8")
  common = primary_ui.partition("<style>")[2].partition("</style>")[0]
  return f'''<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>PitON | Catalog Intelligence</title>
-<style>{common}{CATALOG_NAV_CSS}{MATRIX_TAB_CSS}{METRIC_CSS}</style></head>
+<style>{common}{CATALOG_NAV_CSS}{MATRIX_TAB_CSS}{METRIC_CSS}{extra_css}</style></head>
 <body><main><header class="matrix-header"><h1>PitON <span style="color:#079cd0">Catalog Intelligence</span></h1></header>
 {catalog_tabs("matrix")}<section class="panel matrix-panel">{content}</section></main></body></html>'''
 
