@@ -3,6 +3,7 @@ import csv
 import hashlib
 import io
 import json
+from pathlib import Path
 import re
 import sqlite3
 from contextlib import closing
@@ -46,9 +47,9 @@ def rows_from_csv(content, vendor, product):
     return rows
 
 
-def rows_from_pdf(doc, vendor, product, checksum):
+def rows_from_pdf(doc, vendor, product, checksum, *, pages=""):
     use_ocr = False
-    if identity(vendor, product) == types.PITON:
+    if not pages and identity(vendor, product) == types.PITON:
         import scan_v6
         use_ocr = doc == "piton" or checksum == scan_v6.KNOWN_PDF_SHA256
     if use_ocr:
@@ -65,12 +66,11 @@ def rows_from_pdf(doc, vendor, product, checksum):
                              parameter=key[2], value=None, unit=spec_import.PARAMS[key[2]][0],
                              source=f'{result["document"]["title"]}, PDF стр. {page}',
                              status="manual_review", page=page))
-    else:
+    elif not pages and identity(vendor, product) == types.GRAZIADIO:
         import extract_v4
-        result = extract_v4.candidates(doc)
-        rows = result["proposals"]
-    if not rows:
-        raise ValueError("В PDF не удалось извлечь технические таблицы. Попробуйте импорт из CSV.")
+        rows = extract_v4.candidates(doc)["proposals"]
+    else:
+        rows = []
     if any(identity(r["vendor"], r["product"]) != identity(vendor, product) for r in rows):
         raise ValueError("Найденные в PDF таблицы не соответствуют выбранному каталогу.")
     return rows
@@ -189,8 +189,21 @@ def review(handler, db):
         vendor, product = catalogue["spec_vendor"], catalogue["spec_product"]
         payload = {}
         if action == "pdf":
-            checksum = conn.execute("SELECT sha256 FROM documents WHERE id=?", (document,)).fetchone()[0]
-            rows = rows_from_pdf(document, vendor, product, checksum)
+            payload = json.loads(handler.readbody()) if handler.headers.get("Content-Length", "0") != "0" else {}
+            if not isinstance(payload, dict):
+                raise ValueError("Ожидался диапазон страниц PDF.")
+            pages = payload.get("pages", "")
+            if not isinstance(pages, str) or len(pages) > 16:
+                raise ValueError("Укажите страницу или диапазон, например 4-9.")
+            filename, title, checksum = conn.execute(
+                "SELECT filename,title,sha256 FROM documents WHERE id=?", (document,)
+            ).fetchone()
+            rows = rows_from_pdf(document, vendor, product, checksum, pages=pages)
+            if not rows:
+                from catalog_pdf_ocr import extract
+                rows = extract(Path(db).resolve().parent, filename, title, vendor, product, pages)
+            if not rows:
+                raise ValueError("Не нашлось значений с подтверждёнными строками источника. Проверьте страницы и исполнение.")
         elif action == "csv":
             rows = rows_from_csv(handler.readbody(), vendor, product)
         else:
