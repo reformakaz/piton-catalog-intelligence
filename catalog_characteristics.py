@@ -180,7 +180,7 @@ def write(conn, rows):
 def review(handler, db):
     document = types.param(handler, "document")
     action = types.param(handler, "action")
-    if action not in ("pdf", "csv", "confirm", "save"):
+    if action not in ("pdf", "ai-pdf", "csv", "confirm", "save"):
         raise ValueError("Выберите этап импорта.")
     with closing(types.db_connect(db, writable=action == "save")) as conn, conn:
         if action == "save":
@@ -188,20 +188,26 @@ def review(handler, db):
         catalogue = target(conn, document)
         vendor, product = catalogue["spec_vendor"], catalogue["spec_product"]
         payload = {}
-        if action == "pdf":
+        if action in ("pdf", "ai-pdf"):
             payload = json.loads(handler.readbody()) if handler.headers.get("Content-Length", "0") != "0" else {}
             if not isinstance(payload, dict):
                 raise ValueError("Ожидался диапазон страниц PDF.")
             pages = payload.get("pages", "")
-            if not isinstance(pages, str) or len(pages) > 16:
-                raise ValueError("Укажите страницу или диапазон, например 4-9.")
+            if not isinstance(pages, str) or len(pages) > 100:
+                raise ValueError("Укажите страницы PDF, например 4, 9 или 4-6.")
             filename, title, checksum = conn.execute(
                 "SELECT filename,title,sha256 FROM documents WHERE id=?", (document,)
             ).fetchone()
-            rows = rows_from_pdf(document, vendor, product, checksum, pages=pages)
-            if not rows:
-                from catalog_pdf_ocr import extract
+            if action == "ai-pdf":
+                if payload.get("send_selected_pages") is not True or not pages:
+                    raise ValueError("Укажите страницы PDF и подтвердите отправку этих страниц в OpenAI.")
+                from catalog_pdf_ai import extract
                 rows = extract(Path(db).resolve().parent, filename, title, vendor, product, pages)
+            else:
+                rows = rows_from_pdf(document, vendor, product, checksum, pages=pages)
+                if not rows:
+                    from catalog_pdf_ocr import extract
+                    rows = extract(Path(db).resolve().parent, filename, title, vendor, product, pages)
             if not rows:
                 raise ValueError("Не нашлось значений с подтверждёнными строками источника. Проверьте страницы и исполнение.")
         elif action == "csv":
@@ -212,7 +218,7 @@ def review(handler, db):
                 raise ValueError("Ожидались строки характеристик.")
             rows = payload.get("rows")
         rows = reviewed(conn, normalize(rows, vendor, product, action == "pdf"))
-        if action in ("pdf", "csv"):
+        if action in ("pdf", "ai-pdf", "csv"):
             return types.send_json(handler, 200, {"rows": [{k:v for k,v in row.items() if k != "snapshot"} for row in rows]})
         if any(row["state"] == "conflict" for row in rows):
             raise ValueError("Часть ключей занята другим каталогом. Снимите выбор с этих строк.")
