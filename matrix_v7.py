@@ -1,6 +1,7 @@
 """PitON Catalog Intelligence v7: read-only product comparison matrix."""
 import csv,html,io,json,re,sqlite3
 from collections import defaultdict
+from catalog_engine import COMPARISON_FILTER, COMPARISON_FILTER_PARAMS
 
 PARAMS={
  'nominal_voltage_v':('Напряжение изоляции','equal','V'),
@@ -78,7 +79,11 @@ def matrix(db,material='all'):
  if material not in ('all','Cu','Al'):raise ValueError('Неверный материал')
  with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True,timeout=10) as c:
   c.row_factory=sqlite3.Row
-  raw=[dict(r) for r in c.execute("SELECT vendor,product,material,rating_a,parameter,value,unit,source,status FROM specs WHERE ((vendor='piton' AND product='PitON E3') OR (vendor='graziadio' AND product='Graziadio ISOLSBARRA')) AND material IN ('Cu','Al') ORDER BY material,rating_a,vendor,parameter")]
+  raw=[dict(r) for r in c.execute(
+   f"SELECT vendor,product,material,rating_a,parameter,value,unit,source,status FROM specs "
+   f"WHERE {COMPARISON_FILTER} AND material IN ('Cu','Al') ORDER BY material,rating_a,vendor,parameter",
+   COMPARISON_FILTER_PARAMS,
+  )]
   phase_geometry=pairs(c)
  by=defaultdict(dict)
  for r in raw:
