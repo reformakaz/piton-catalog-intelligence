@@ -337,7 +337,6 @@ $('#catalog-editor-form').addEventListener('submit',async event => {
 });
 
 $('#run').addEventListener('click',async()=>{const b=$('#run');b.disabled=true;$('#compareStatus').textContent='Формирование отчёта…';try{const d=await req('/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({material:$('#material').value,rating:Number($('#rating').value)})});$('#download').innerHTML=Object.entries(d.links).map(([ext,url])=>`<a href="${url}" ${ext==='html'?'target="_blank" rel="noopener noreferrer"':'download'}>${ext.toUpperCase()} ↗</a>`).join('');$('#preview').src=d.links.html;$('#results').classList.remove('hidden');$('#compareStatus').textContent='Отчёт готов. Отсутствующие данные обозначены отдельно.';}catch(e){$('#compareStatus').textContent='Ошибка: '+e.message}finally{b.disabled=false}});
-$('#upload').addEventListener('click',async()=>{const file=$('#file').files[0],vendor=$('#vendor').value.trim(),title=$('#title').value.trim();const catalog_type=$('#catalog-type').value;if(!file||!title||!vendor||!catalog_type){$('#uploadStatus').textContent='Укажите тип, производителя, название и PDF';return}const btn=$('#upload');btn.disabled=true;$('#uploadStatus').textContent='Загрузка и индексация…';try{const q=new URLSearchParams({vendor,title,catalog_type});const d=await req('/api/upload?'+q,{method:'POST',headers:{'Content-Type':'application/pdf'},body:file});$('#uploadStatus').textContent=`Загружено: ${d.pages} страниц, текстовый слой на ${d.text_pages}. Параметры автоматически не извлечены.`;$('#file').value='';await load()}catch(e){$('#uploadStatus').textContent='Ошибка: '+e.message}finally{btn.disabled=false}});
 const char = id => $('#characteristics-' + id);
 const characteristicStages = ['source', 'review', 'save'];
 const characteristicStates = {
@@ -361,12 +360,22 @@ function characteristicsStage(stage) {
   characteristicsMessage();
 }
 
+const sourceMethod = () => $('input[name="characteristics-method"]:checked').value;
+function selectCharacteristicMethod(mode) {
+  $('input[name="characteristics-method"][value="' + mode + '"]').checked = true;
+  characteristicsSource();
+}
+
 function characteristicsSource() {
-  const csv = $('input[name="characteristics-method"]:checked').value === 'csv';
+  const mode = sourceMethod();
   const document = char('document').value;
-  char('csv').hidden = !csv;
-  char('pdf-help').hidden = csv;
-  char('prepare').textContent = csv ? 'Проверить файл' : 'Извлечь характеристики';
+  char('new').hidden = mode !== 'new';
+  char('existing').hidden = mode === 'new';
+  char('csv').hidden = mode !== 'csv';
+  char('use-csv').hidden = true;
+  char('prepare').textContent = {
+    new: 'Загрузить и распознать', pdf: 'Распознать PDF', csv: 'Проверить файл',
+  }[mode];
   char('templates').hidden = !document;
   for (const [id, kind] of [['standard-template', 'electrical'], ['phase-template', 'phase']]) {
     char(id).href = api('/api/characteristics-template?' + new URLSearchParams({document, kind}));
@@ -388,7 +397,7 @@ async function loadCharacteristicCatalogues() {
       select.add(option);
     }
     if ([...select.options].some(option => option.value === previous)) select.value = previous;
-    if (select.options.length === 1) characteristicsMessage('Укажите производителя и тип каталога в библиотеке.');
+    if (select.options.length === 1 && sourceMethod() !== 'new') characteristicsMessage('Загрузите PDF или укажите данные каталога в библиотеке.');
     characteristicsSource();
   } catch (error) {
     characteristicsMessage(error.message);
@@ -442,30 +451,72 @@ char('document').addEventListener('change', characteristicsSource);
 document.querySelectorAll('input[name="characteristics-method"]').forEach(
   input => input.addEventListener('change', characteristicsSource),
 );
+char('use-csv').addEventListener('click', () => {
+  selectCharacteristicMethod('csv');
+  char('file').focus();
+});
+
+async function uploadCharacteristicPdf() {
+  const title = $('#title').value.trim();
+  const vendor = $('#vendor').value.trim().toLowerCase();
+  const catalog_type = $('#catalog-type').value;
+  const file = $('#file').files[0];
+  if (!title || !vendor || !catalog_type || !file) {
+    throw Error('Укажите название каталога, производителя и тип, затем выберите PDF.');
+  }
+  if (!/^[a-z][a-z0-9_-]{1,35}$/.test(vendor)) {
+    throw Error('Код производителя — от 2 до 36 символов: латинские буквы, цифры, дефис или подчёркивание.');
+  }
+  const query = new URLSearchParams({vendor,title,catalog_type});
+  const saved = await req('/api/upload?' + query, {
+    method: 'POST', headers: {'Content-Type': 'application/pdf'}, body: file,
+  });
+  const option = document.createElement('option');
+  option.value = saved.id;
+  option.textContent = title + ' · ' + CATALOG_TYPE_LABELS[catalog_type];
+  char('document').add(option);
+  char('document').value = option.value;
+  $('#file').value = '';
+  selectCharacteristicMethod('pdf');
+  return saved.id;
+}
+
 char('prepare').addEventListener('click', async () => {
   const target = char('document');
-  const documentId = target.value;
-  const mode = $('input[name="characteristics-method"]:checked').value;
+  let documentId = target.value;
+  const mode = sourceMethod();
   const file = char('file').files[0];
-  if (!documentId || (mode === 'csv' && !file)) {
+  if (mode !== 'new' && (!documentId || (mode === 'csv' && !file))) {
     characteristicsMessage(!documentId ? 'Выберите каталог.' : 'Выберите файл CSV.');
     return;
   }
   char('prepare').disabled = true;
-  characteristicsMessage(mode === 'csv' ? 'Проверяем CSV…' : 'Извлекаем значения из PDF…');
+  char('use-csv').hidden = true;
+  const fields = [...char('source').querySelectorAll('input,select')];
+  fields.forEach(field => field.disabled = true);
+  let uploaded = false;
   try {
-    const result = await characteristicsRequest(mode, documentId, mode === 'csv' ? file : '{}',
-      mode === 'csv' ? 'text/csv' : 'application/json');
+    if (mode === 'new') {
+      characteristicsMessage('Загружаем PDF…');
+      documentId = await uploadCharacteristicPdf();
+      uploaded = true;
+    }
+    const csv = mode === 'csv';
+    characteristicsMessage(csv ? 'Проверяем CSV…' : 'Извлекаем значения из PDF…');
+    const result = await characteristicsRequest(csv ? 'csv' : 'pdf', documentId, csv ? file : '{}',
+      csv ? 'text/csv' : 'application/json');
     const title = [...target.options].find(option => option.value === documentId)?.textContent || 'Каталог';
     characteristics = {document: documentId, rows: result.rows};
     document.querySelectorAll('.characteristics-context').forEach(context => {
-      context.textContent = title + ' · ' + (mode === 'csv' ? file.name : 'PDF из библиотеки');
+      context.textContent = title + ' · ' + (csv ? file.name : 'PDF из библиотеки');
     });
     renderCharacteristics();
     characteristicsStage('review');
   } catch (error) {
-    characteristicsMessage(error.message);
+    characteristicsMessage((uploaded ? 'PDF сохранён в библиотеке. ' : '') + error.message);
+    if ((uploaded || mode === 'pdf') && documentId) char('use-csv').hidden = false;
   } finally {
+    fields.forEach(field => field.disabled = false);
     char('prepare').disabled = false;
   }
 });
@@ -550,6 +601,7 @@ char('apply').addEventListener('click', async () => {
   }
 });
 characteristicsStage('source');
+characteristicsSource();
 const initialSection = new URLSearchParams(location.search).get('workspace');
 const initialTab = Array.from(tabs).find(button => button.dataset.tab === initialSection);
 if (initialTab) initialTab.click();
