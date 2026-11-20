@@ -145,7 +145,7 @@ def comparison_markup(material, rating, phase_geometry):
                 section_area(left), section_area(right), ("меньше", "мм²"),
             ))
         else:
-            highlight = ("больше", "мм²") if code == "phase_area_mm2" else None
+            highlight = {"phase_area_mm2": ("больше", "мм²"), "mass_kg_m": ("меньше", "кг/м")}.get(code)
             built_rows.append(comparison_row(label, left, right, highlight))
     rows = "".join(built_rows)
     notes = "".join(
