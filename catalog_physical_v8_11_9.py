@@ -135,11 +135,11 @@ def comparison_row(label, left, right, highlight=None, prefer_compound=False):
     return f'<tr><th scope="row">{escape(label)}</th><td>{display[0]}</td><td>{display[1]}</td></tr>'
 
 
-def comparison_markup(material, rating, phase_geometry):
+def comparison_parts(material, rating, phase_geometry):
     piton = VARIANTS.get((PITON, material, rating), {}) | phase_geometry.get("piton", {})
     graziadio = VARIANTS.get((GRAZIADIO, material, rating), {}) | phase_geometry.get("graziadio", {})
     if not (piton or graziadio):
-        return ""
+        return "", ""
     built_rows = []
     for code, label in LABELS.items():
         if code in ("phase_width_mm", "phase_height_mm"):
@@ -168,9 +168,16 @@ def comparison_markup(material, rating, phase_geometry):
         for product, entries in ((PITON[1], piton), (GRAZIADIO[1], graziadio))
         if any(code in entries for code in phase.LABELS)
     )
+    return rows, f'<ul class="source">{notes}{phase_sources}</ul>' if notes or phase_sources else ""
+
+
+def comparison_markup(material, rating, phase_geometry):
+    rows, references = comparison_parts(material, rating, phase_geometry)
+    if not rows:
+        return ""
     return (
         '<section class="construction-details"><h2>Габариты, масса и изоляция</h2>'
         '<div class="scroll"><table class="catalog-comparison-table"><thead><tr><th>Параметр</th><th>PitON E3</th>'
         f'<th>Graziadio ISOLSBARRA</th></tr></thead><tbody>{rows}</tbody></table></div>'
-        f'<ul class="source">{notes}{phase_sources}</ul></section>'
+        f'{references}</section>'
     )
