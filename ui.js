@@ -374,8 +374,11 @@ function characteristicsSource() {
   char('csv').hidden = mode !== 'csv';
   char('pdf-pages').hidden = mode === 'csv';
   char('use-csv').hidden = true;
+  const withAI = mode !== 'csv' && char('ai').checked;
   char('prepare').textContent = {
-    new: 'Загрузить и распознать', pdf: 'Распознать PDF', csv: 'Проверить файл',
+    new: withAI ? 'Загрузить и распознать с OpenAI' : 'Загрузить и распознать',
+    pdf: withAI ? 'Распознать с OpenAI' : 'Распознать PDF',
+    csv: 'Проверить файл',
   }[mode];
   char('templates').hidden = !document;
   for (const [id, kind] of [['standard-template', 'electrical'], ['phase-template', 'phase']]) {
@@ -448,6 +451,7 @@ function renderCharacteristics() {
   characteristicsSelection();
 }
 
+char('ai').addEventListener('change', characteristicsSource);
 char('document').addEventListener('change', characteristicsSource);
 document.querySelectorAll('input[name="characteristics-method"]').forEach(
   input => input.addEventListener('change', characteristicsSource),
@@ -488,6 +492,13 @@ char('prepare').addEventListener('click', async () => {
   const mode = sourceMethod();
   const file = char('file').files[0];
   const pages = char('pages').value.trim();
+  const withAI = mode !== 'csv' && char('ai').checked;
+  if (withAI && !/^[1-9][0-9]*(?:-[1-9][0-9]*)?(?:\s*,\s*[1-9][0-9]*(?:-[1-9][0-9]*)?)*$/.test(pages)) {
+    char('pdf-pages').open = true;
+    char('pages').focus();
+    characteristicsMessage('Укажите страницы для отправки в OpenAI, например 4, 9 или 4-6.');
+    return;
+  }
   if (mode !== 'new' && (!documentId || (mode === 'csv' && !file))) {
     characteristicsMessage(!documentId ? 'Выберите каталог.' : 'Выберите файл CSV.');
     return;
@@ -504,9 +515,10 @@ char('prepare').addEventListener('click', async () => {
       uploaded = true;
     }
     const csv = mode === 'csv';
-    characteristicsMessage(csv ? 'Проверяем CSV…' : 'Извлекаем значения из PDF…');
-    const result = await characteristicsRequest(csv ? 'csv' : 'pdf', documentId, csv ? file : JSON.stringify({pages}),
-      csv ? 'text/csv' : 'application/json');
+    characteristicsMessage(csv ? 'Проверяем CSV…' : withAI ? 'Распознаём выбранные страницы с OpenAI…' : 'Извлекаем значения из PDF…');
+    const action = csv ? 'csv' : withAI ? 'ai-pdf' : 'pdf';
+    const body = csv ? file : JSON.stringify({pages, send_selected_pages: withAI});
+    const result = await characteristicsRequest(action, documentId, body, csv ? 'text/csv' : 'application/json');
     const title = [...target.options].find(option => option.value === documentId)?.textContent || 'Каталог';
     characteristics = {document: documentId, rows: result.rows};
     document.querySelectorAll('.characteristics-context').forEach(context => {
@@ -518,8 +530,13 @@ char('prepare').addEventListener('click', async () => {
     characteristicsMessage((uploaded ? 'PDF сохранён в библиотеке. ' : '') + error.message);
     if ((uploaded || mode === 'pdf') && documentId) char('use-csv').hidden = false;
   } finally {
+    char('ai').checked = false;
     fields.forEach(field => field.disabled = false);
     char('prepare').disabled = false;
+    // Preserve the offer to import CSV when a new PDF could not be read.
+    const fallback = !char('use-csv').hidden;
+    characteristicsSource();
+    char('use-csv').hidden = !fallback;
   }
 });
 
