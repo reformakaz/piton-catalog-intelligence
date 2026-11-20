@@ -372,6 +372,7 @@ function characteristicsSource() {
   char('new').hidden = mode !== 'new';
   char('existing').hidden = mode === 'new';
   char('csv').hidden = mode !== 'csv';
+  char('pdf-pages').hidden = mode === 'csv';
   char('use-csv').hidden = true;
   char('prepare').textContent = {
     new: 'Загрузить и распознать', pdf: 'Распознать PDF', csv: 'Проверить файл',
@@ -486,6 +487,7 @@ char('prepare').addEventListener('click', async () => {
   let documentId = target.value;
   const mode = sourceMethod();
   const file = char('file').files[0];
+  const pages = char('pages').value.trim();
   if (mode !== 'new' && (!documentId || (mode === 'csv' && !file))) {
     characteristicsMessage(!documentId ? 'Выберите каталог.' : 'Выберите файл CSV.');
     return;
@@ -503,7 +505,7 @@ char('prepare').addEventListener('click', async () => {
     }
     const csv = mode === 'csv';
     characteristicsMessage(csv ? 'Проверяем CSV…' : 'Извлекаем значения из PDF…');
-    const result = await characteristicsRequest(csv ? 'csv' : 'pdf', documentId, csv ? file : '{}',
+    const result = await characteristicsRequest(csv ? 'csv' : 'pdf', documentId, csv ? file : JSON.stringify({pages}),
       csv ? 'text/csv' : 'application/json');
     const title = [...target.options].find(option => option.value === documentId)?.textContent || 'Каталог';
     characteristics = {document: documentId, rows: result.rows};
