@@ -28,7 +28,6 @@ def candidates(docid):
   row=cn.execute('SELECT filename,title,pages FROM documents WHERE id=?',(docid,)).fetchone()
  if not row:raise ValueError('Каталог не найден')
  filename,title,pages=row
- if docid!='piton' or filename!='piton.pdf':raise ValueError('OCR v6 поддерживает только исходный PitON E3')
  path=(ROOT/'catalogs'/filename).resolve()
  if not path.is_file() or path.parent!=(ROOT/'catalogs').resolve():raise ValueError('PDF не найден')
  pdf_bytes=path.read_bytes()

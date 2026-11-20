@@ -119,8 +119,10 @@ def library_catalogues(conn):
             identity = (vendor, product)
         if not identity:
             identity = title_identity(titles, doc["title"], vendor)
-        spec_vendor, spec_product = identity or ("", "")
         catalog_type = metadata.get("catalog_type") or ""
+        if not identity and catalog_type and vendor and doc["title"]:
+            identity = (vendor, doc["title"])
+        spec_vendor, spec_product = identity or ("", "")
         expected_type = FIXED.get(identity, catalog_type)
         comparison_type = expected_type if not catalog_type or catalog_type == expected_type else ""
         result.append({"document_id": docid, "title": doc["title"] or "", "vendor": vendor,
@@ -187,7 +189,7 @@ def param(handler, key):
 def upload_fields(handler, vendor):
     identity = title_identity(TITLE_IDENTITIES, param(handler, "title"), vendor)
     product = param(handler, "product") if "product" in handler.params() else (
-        identity[1] if identity and identity[0] == vendor else ""
+        identity[1] if identity and identity[0] == vendor else param(handler, "title")
     )
     return classification(vendor, product, param(handler, "catalog_type"))
 

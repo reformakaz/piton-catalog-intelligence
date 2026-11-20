@@ -64,6 +64,9 @@ class Handler(BaseHTTPRequestHandler):
    if path.endswith('.json'):return self.send(200,jdata(data))
    return self.send(200,matrix_v7.as_csv(data),'text/csv; charset=utf-8',{'Content-Disposition':'attachment; filename="catalog_matrix_v7.csv"'})
   if path=='/api/health':return self.send(200,jdata({'ok':True,'version':'5.0','bind':'loopback'}))
+  if path=='/api/characteristics-template':
+   from catalog_characteristics import template
+   return template(self,DB)
   if path=='/api/spec-template':
    if self.params().get('phase')==['1']:
     from catalog_phase_conductor_v8_11_10 import CSV_FIELDS
@@ -91,11 +94,10 @@ class Handler(BaseHTTPRequestHandler):
    return self.send(200,jdata(extract_v4.candidates(doc)))
   if path=='/api/library':
    import catalog_physical_v8_11_9 as physical
-   from catalog_phase_conductor_v8_11_10 import geometry
    with connection() as c:
     docs=[dict(x) for x in c.execute('SELECT * FROM documents ORDER BY created_at DESC')]
     specs=[dict(x) for x in c.execute('SELECT vendor,product,material,rating_a,parameter,value,unit,source,status FROM specs ORDER BY vendor,material,rating_a')]
-    construction=physical.records(geometry(c))
+    construction=physical.records(physical.geometry(c))
    return self.send(200,jdata({'documents':docs,'specs':specs,'physical':construction,'parameters':{**PARAMS,**physical.LABELS},'note':'Новые PDF индексируются, но их спецификации не распознаются автоматически; у v1 только пилот Cu 4000 A.'}))
   if path.startswith('/api/pdf/'):
    docid=path.split('/')[-1]
@@ -125,6 +127,9 @@ class Handler(BaseHTTPRequestHandler):
   origin=self.headers.get('Origin','')
   if not getattr(self,'catalog_public',False) and origin and origin not in ('http://127.0.0.1:8137','http://localhost:8137'):
    return self.fail(403,'Недопустимый Origin')
+  if path=='/api/characteristics':
+   from catalog_characteristics import review
+   return review(self,DB)
   if path=='/api/catalog-type':
    from catalog_types_v8_11 import set_existing_type
    return set_existing_type(self,DB)

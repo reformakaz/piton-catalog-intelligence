@@ -9,16 +9,15 @@ ADMIN_HEADER = "X-Piton-Catalog-User"
 WORKSPACE_TABS = (
     ("compare", "Сравнение"),
     ("library", "Библиотека каталогов"),
-    ("importer", "Импорт характеристик"),
-    ("extractor", "Извлечение из PDF"),
+    ("characteristics", "Характеристики"),
 )
-ADMIN_SECTIONS = {"library", "importer", "extractor"}
+ADMIN_SECTIONS = {"library", "characteristics"}
 WORKSPACE_STYLE = """
 html.catalog-workspace{scrollbar-gutter:stable}
 .catalog-workspace main{box-sizing:border-box;width:100%;max-width:none}
 .catalog-workspace main > section{min-width:0}
 .catalog-workspace .workspace-header{display:block}
-.workspace-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 18px}
+.workspace-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0 0 18px}
 .workspace-tabs a{display:flex;align-items:center;justify-content:center;text-align:center;
   padding:9px 8px;color:#577082;border-bottom:3px solid transparent;text-decoration:none;font-weight:600}
 .workspace-tabs a[aria-current=page]{border-color:#06a0da;color:#007daf}
@@ -105,10 +104,10 @@ WORKSPACE_HEADER = (
     '<span style="color:#079cd0">Catalog Intelligence</span></h1></header>'
 )
 READ = {
-    "ui.js", "api/library", "api/catalog-types", "api/spec-template",
+    "ui.js", "api/library", "api/catalog-types", "api/spec-template", "api/characteristics-template",
     "api/scan-v6", "api/scan-v5", "api/extract-v4",
 }
-WRITE = {"api/upload", "api/catalog-type", "api/spec-import", "api/report"}
+WRITE = {"api/characteristics", "api/upload", "api/catalog-type", "api/spec-import", "api/report"}
 FILES = re.compile(r"api/(?:pdf/[a-zA-Z0-9_-]+|reports/comparison_(?:Cu|Al)_[0-9]{3,5}\.(?:html|csv|json))")
 
 
@@ -132,6 +131,9 @@ def public_route(handler):
     elif not suffix:
         view = query.get("view", [""])[0]
         section = query.get("workspace", [""])[0]
+        if handler.catalog_admin and not view and section in ("importer", "extractor"):
+            handler.send(302,headers={"Location": MOUNT + "?workspace=characteristics"})
+            return False
         show_shell = handler.catalog_admin and not view and section in ADMIN_SECTIONS and "material" not in query
         handler.catalog_manager = handler.catalog_admin and not show_shell and view in ("", "matrix")
         path = "/" if show_shell else "/matrix-v7"
