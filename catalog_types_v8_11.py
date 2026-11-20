@@ -251,7 +251,8 @@ def page(handler, status, title, body, css=""):
     markup = (
         '<!doctype html><html lang="ru"><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<title>{escape(title)}</title><style>{card.CSS}{css}</style><body><main>{body}</main></body></html>'
+        f'<title>{escape(title)}</title><style>{card.CSS}{css}{matrix_v7.CATALOG_NAV_CSS}</style>'
+        f'<body><main>{body}</main></body></html>'
     )
     handler.send(status, markup.encode("utf-8"), "text/html; charset=utf-8")
 
@@ -282,7 +283,7 @@ def legrand_page(handler, db):
     if not entries:
         note = '<p class="notice">В этом каталоге нет импортированных характеристик для выбранного исполнения.</p>'
     page(handler, 200, series.TITLE, f"""
-<nav><a href="?material=all">← К каталогам</a></nav>
+{matrix_v7.catalog_tabs("catalog")}
 <header><p class="eyebrow">Токопровод · Каталожная карточка</p><h1>{series.TITLE}</h1>
 <p class="variant">{series.variant_name(*key)}</p></header>
 <form method="get" class="series-form"><input type="hidden" name="view" value="catalog">
@@ -320,7 +321,9 @@ def quote_page(handler, db):
         )
     html = html.replace('<div id="quote-technical-templates" hidden></div>',
                         '<div id="quote-technical-templates" hidden>' + templates + '</div>', 1)
-    html = html.replace("/* QUOTE_TECHNICAL_CSS */", matrix_v7.METRIC_CSS, 1)
+    html = html.replace("/* QUOTE_TECHNICAL_CSS */", matrix_v7.METRIC_CSS + matrix_v7.CATALOG_NAV_CSS, 1)
+    html = html.replace('<nav class="screen"><a href="?material=all">← К матрице</a></nav>',
+                        matrix_v7.catalog_tabs("quote"), 1)
     handler.send(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
 
@@ -408,19 +411,12 @@ def get(handler, db):
             return True
         data = matrix_v7.matrix(db, material)
         status, html = card.matrix_view(data, handler.params(), matrix_v7.page)
-        if not view:
-            html = html.replace("</h1>", '</h1><p><a class="download" href="?view=catalog">'
-                                'Токопроводы · каталог Legrand</a></p>', 1)
         handler.send(status, html.encode("utf-8"), "text/html; charset=utf-8")
         return True
     if path != "/matrix-v7":
         error(handler, "Для выгрузки сравнения подтвердите тип каталога Graziadio ISOLSBARRA.", 409)
     else:
-        page(handler, 200, "Каталоги PitON", """
-<h1>Каталоги PitON</h1>
-<section><h2>Шинопроводы</h2><p>Для сравнения PitON E3 и Graziadio ISOLSBARRA
-укажите тип каталога Graziadio в библиотеке.</p></section>
-<section><h2>Токопроводы</h2><a href="?view=catalog">Каталог Legrand RCP‑4C (3L+N)</a></section>
-<section><a href="?view=quote-comparison">Сравнение КП</a></section>
-""")
+        content = """<h2>Матрица сравнения PitON E3 / Graziadio</h2>
+<p class="warning">Для сравнения укажите тип каталога Graziadio в библиотеке.</p>"""
+        handler.send(200, matrix_v7.matrix_tab(content).encode("utf-8"), "text/html; charset=utf-8")
     return True

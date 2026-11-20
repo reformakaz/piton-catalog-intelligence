@@ -1,6 +1,7 @@
 """PitON Catalog Intelligence v7: read-only product comparison matrix."""
 import csv,html,io,json,re,sqlite3
 from collections import defaultdict
+from pathlib import Path
 from catalog_engine import COMPARISON_FILTER, COMPARISON_FILTER_PARAMS, PITON_PRODUCTS
 
 PARAMS={
@@ -18,6 +19,54 @@ METRIC_CSS = """
 .catalog-comparison-table .metric-badge{display:inline-block;max-width:100%;margin-top:3px;padding:2px 6px;border-radius:4px;background:#145943;color:#fff;font-size:.82em;font-weight:700;line-height:1.25;overflow-wrap:anywhere}
 .catalog-comparison-table .comparison-note{display:block;margin-top:4px;color:#624617}
 """
+CATALOG_NAV_CSS = """
+.catalog-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px;border-bottom:1px solid #dce5eb}
+.catalog-tabs a{display:block;padding:9px 12px;color:#577082;border-bottom:3px solid transparent;text-decoration:none;font-weight:600}
+.catalog-tabs a[aria-current=page]{border-color:#06a0da;color:#007daf}
+.catalog-tabs a:hover,.catalog-tabs a:focus-visible{color:#007daf;background:#edf5fa}
+"""
+MATRIX_TAB_CSS = """
+.matrix-header{display:block}
+.matrix-panel h2{margin-bottom:10px}
+.matrix-toolbar{margin:10px 0 16px}
+.matrix-toolbar label,.matrix-actions{display:inline-block;vertical-align:bottom;max-width:100%}
+.matrix-toolbar label{width:180px;margin:6px 12px 0 0}
+.matrix-toolbar select{display:block;margin-top:5px}
+.matrix-actions > *{display:inline-block;vertical-align:middle;margin:6px 8px 0 0}
+.matrix-actions > :last-child{margin-right:0}
+.matrix-panel .matrix-counts{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.matrix-counts .status{margin:0}
+.matrix-panel .matrix-position{margin:12px 0;border:1px solid #e0e8ef;border-radius:9px}
+.matrix-position > summary{padding:10px 12px;cursor:pointer;background:#f7fafc;color:#213547}
+.matrix-panel .scroll{overflow:auto}
+.matrix-position .catalog-comparison-table{min-width:420px}
+.matrix-position small{display:block;overflow-wrap:anywhere;color:#546878}
+.matrix-position .construction-details{padding:12px}
+.matrix-panel .download{display:inline-block;padding:7px 10px;border:1px solid #cbd9e5;border-radius:7px;text-decoration:none}
+.matrix-panel .missing{color:#805320}
+"""
+
+
+def catalog_tabs(active):
+ tabs = (("matrix", "Матрица сравнений", "?view=matrix"),
+         ("quote", "Сравнение КП", "?view=quote-comparison"),
+         ("catalog", "Каталог Legrand", "?view=catalog"))
+ links = []
+ for key, label, target in tabs:
+  current = ' aria-current="page"' if key == active else ''
+  element_id = ' id="offer-comparison-entry"' if key == "quote" else ''
+  links.append(f'<a{element_id} href="{target}"{current}>{label}</a>')
+ return '<nav class="catalog-tabs screen" aria-label="Каталоги PitON">' + "".join(links) + '</nav>'
+
+
+def matrix_tab(content):
+ primary_ui = Path(__file__).with_name("ui.html").read_text(encoding="utf-8")
+ common = primary_ui.partition("<style>")[2].partition("</style>")[0]
+ return f'''<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>PitON | Catalog Intelligence</title>
+<style>{common}{CATALOG_NAV_CSS}{MATRIX_TAB_CSS}{METRIC_CSS}</style></head>
+<body><main><header class="matrix-header"><h1>PitON <span style="color:#079cd0">Catalog Intelligence</span></h1></header>
+{catalog_tabs("matrix")}<section class="panel matrix-panel">{content}</section></main></body></html>'''
 
 
 def metric_highlight(value, badge):
@@ -179,12 +228,28 @@ def page(data):
    for d in entry['details']
   )
   ct=entry['counts']
-  rows_html.append(f'<details><summary><b>{text(entry["material"])} · {entry["rating_a"]} А</b> — PitON: {ct["piton"]}; Graziadio: {ct["graziadio"]}; совпадений: {ct["equal"]}; нет данных: {ct["missing"]}; уточнить: {ct["different"]}{" · ⚠ есть непроверенные значения" if entry["caution"] else ""}</summary><table class="catalog-comparison-table"><thead><tr><th>Параметр</th><th>PitON E3</th><th>Graziadio ISOLSBARRA</th></tr></thead><tbody>{detail}</tbody></table>{comparison_markup(entry["material"], entry["rating_a"], entry.get("phase_geometry", {}))}</details>')
+  rows_html.append(f'<details class="matrix-position"><summary><b>{text(entry["material"])} · {entry["rating_a"]} А</b> — PitON: {ct["piton"]}; Graziadio: {ct["graziadio"]}; совпадений: {ct["equal"]}; нет данных: {ct["missing"]}; уточнить: {ct["different"]}{" · ⚠ есть непроверенные значения" if entry["caution"] else ""}</summary><div class="scroll"><table class="catalog-comparison-table"><thead><tr><th>Параметр</th><th>PitON E3</th><th>Graziadio ISOLSBARRA</th></tr></thead><tbody>{detail}</tbody></table></div>{comparison_markup(entry["material"], entry["rating_a"], entry.get("phase_geometry", {}))}</details>')
  opts=''.join(f'<option value="{v}" {"selected" if v==data["scope"] else ""}>{label}</option>' for v,label in [('all','Cu и Al'),('Cu','Медь (Cu)'),('Al','Алюминий (Al)')])
  t=data['totals']
- return f'''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Catalog Intelligence — матрица сравнения</title><style>
- body{{font:14px/1.5 system-ui,Arial;background:#f1f5f9;color:#17243a;margin:0;padding:25px}}main{{max-width:1250px;margin:auto;background:white;padding:25px;border-radius:12px}}h1{{margin:0 0 7px}}.muted,small{{color:#60748c}}.note{{padding:12px;border-left:4px solid #e8a121;background:#fff8e8;margin:16px 0}}.stats{{display:flex;gap:12px;flex-wrap:wrap}}.stats span{{padding:11px;background:#eef4f8;border-radius:7px}}details{{border:1px solid #d5dfe8;border-radius:8px;margin:12px 0}}summary{{padding:14px;cursor:pointer;background:#f8fafc}}table{{width:100%;border-collapse:collapse}}th,td{{text-align:left;padding:10px;border-top:1px solid #e5e9ee;vertical-align:top}}td small{{display:block;font-size:11px;max-width:300px;overflow-wrap:anywhere;margin-top:5px}}.missing{{color:#9b5b1b}}select,button,a.download{{padding:9px;border:1px solid #b6c9d7;border-radius:6px;background:#fff;color:#135b88}}a.download{{display:inline-block;text-decoration:none}}@media(max-width:750px){{body{{padding:4px}}main{{padding:10px}}th,td{{font-size:11px;padding:4px}}}}
- {METRIC_CSS}</style></head><body><main><p><a href="/">← Вернуться в Catalog Intelligence</a></p><h1>Матрица сравнения PitON E3 / Graziadio</h1><p class="muted">Только сведения из локальной базы, без AI-догадок. Сравниваются одинаковые материалы и номинальные токи.</p><form method="get" action="/matrix-v7"><label>Материал: <select name="material">{opts}</select></label> <button type="submit">Показать</button> <a class="download" href="/api/matrix-v7.csv?material={text(data['scope'])}">CSV ↓</a> <a class="download" href="/api/matrix-v7.json?material={text(data['scope'])}">JSON ↓</a></form><div class="note">Отсутствие данных не означает недостаток изделия. «Преимущество» относится только к конкретному числовому параметру, а не ко всему оборудованию. Проверяйте исполнение, конфигурацию N/PE и испытательные протоколы. ⚠ — характеристика требует проверки.</div><div class="stats"><span><b>{len(rows)}</b> сочетаний материал/номинал</span><span><b>{t['piton']}</b> преимуществ PitON</span><span><b>{t['graziadio']}</b> преимуществ Graziadio</span><span><b>{t['missing']}</b> сравнений без данных</span><span><b>{t['different']}</b> требуют уточнения</span></div>{''.join(rows_html) if rows_html else '<p>Нет характеристик для выбранного материала.</p>'}<h2>Рекомендации менеджеру</h2><ol><li>Не сравнивать несопоставимые исполнения (нейтраль, PE, IP, стандарт испытания).</li><li>При преимуществе по R20 предлагать расчёт потерь только с учётом длины трассы, профиля нагрузки и температуры.</li><li>При сравнении Icw/Ipk запросить расчётные токи КЗ и требования проекта.</li><li>Проверить все строки с ⚠ по оригинальному PDF перед отправкой заказчику.</li></ol><p class="muted">Внутренний аналитический материал; не является сертификатом соответствия или расчётом проекта.</p></main></body></html>'''
+ return matrix_tab(f'''
+<h2>Матрица сравнения PitON E3 / Graziadio</h2>
+<form class="matrix-toolbar" method="get" action="/matrix-v7">
+<label>Материал<select name="material">{opts}</select></label>
+<div class="matrix-actions"><button type="submit">Показать</button>
+<a class="download" href="/api/matrix-v7.csv?material={text(data['scope'])}">CSV ↓</a>
+<a class="download" href="/api/matrix-v7.json?material={text(data['scope'])}">JSON ↓</a></div>
+</form>
+<div class="warning">⚠ Характеристика требует сверки с источником. Сопоставляйте исполнения с одинаковой конфигурацией N/PE и подтверждёнными условиями испытаний.</div>
+<div class="matrix-counts">
+<span class="status"><b>{len(rows)}</b> сочетаний материала и номинала</span>
+<span class="status"><b>{t['piton']}</b> преимуществ PitON</span>
+<span class="status"><b>{t['graziadio']}</b> преимуществ Graziadio</span>
+<span class="status"><b>{t['missing']}</b> сравнений без данных</span>
+<span class="status"><b>{t['different']}</b> требуют уточнения</span>
+</div>
+{''.join(rows_html) if rows_html else '<p>Нет характеристик для выбранного материала.</p>'}
+''')
+
 
 def as_csv(data):
  s=io.StringIO();w=csv.writer(s,delimiter=';');w.writerow(['Материал','Ток, А','Параметр','PitON','Ед. PitON','Источник PitON','Статус PitON','Graziadio','Ед. Graziadio','Источник Graziadio','Статус Graziadio','Итог'])
