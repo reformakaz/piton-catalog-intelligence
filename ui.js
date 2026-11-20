@@ -79,6 +79,13 @@ async function load() {
         specsByCatalogue.get(key).push(row);
       }
     }
+    const variantsByDocument = new Map();
+    for (const row of library.variants || []) {
+      const id = String(row.document_id);
+      if (!variantsByDocument.has(id)) variantsByDocument.set(id,[]);
+      const source_url = row.page ? api('/api/pdf/' + encodeURIComponent(id)) + '#page=' + row.page : '';
+      variantsByDocument.get(id).push({...row,source_url});
+    }
     catalogueParameters = library.parameters;
     const expanded = openSpecs && {
       id:openSpecs.id,
@@ -92,7 +99,8 @@ async function load() {
       return [id,{
         id,title:doc.title || '',vendor:type?.vendor || doc.vendor || '',
         catalogType:type?.catalog_type || '',
-        specs:specsByCatalogue.get(JSON.stringify([type?.spec_vendor,type?.spec_product])) || [],
+        specs:[...(specsByCatalogue.get(JSON.stringify([type?.spec_vendor,type?.spec_product])) || []),
+               ...(variantsByDocument.get(id) || [])],
       }];
     }));
     $('#libStats').innerHTML = '<div class="status">Документов: <b>'+library.documents.length+'</b></div>';
@@ -161,11 +169,12 @@ function renderCatalogueSpecsRows(panel, specs, columns, preferredRating) {
     '<option value="'+esc(amps)+'">'+esc(amps)+' А</option>').join('');
   rating.value = ratings.includes(priorRating) ? priorRating : '';
 
+  const showVariant = specs.some(row=>row.rcp_variant);
   const byVariant = new Map();
   for (const row of matchingMaterial) {
     if (rating.value && String(row.rating_a) !== rating.value) continue;
-    const key = JSON.stringify([row.material,row.rating_a]);
-    if (!byVariant.has(key)) byVariant.set(key,{material:row.material,rating:row.rating_a,specs:new Map()});
+    const key = JSON.stringify([row.rcp_variant,row.material,row.rating_a]);
+    if (!byVariant.has(key)) byVariant.set(key,{variant:row.rcp_variant,material:row.material,rating:row.rating_a,specs:new Map()});
     const parameters = byVariant.get(key).specs;
     if (!parameters.has(row.parameter)) parameters.set(row.parameter,[]);
     parameters.get(row.parameter).push(row);
@@ -176,10 +185,11 @@ function renderCatalogueSpecsRows(panel, specs, columns, preferredRating) {
     (serviceColumns.has(code) || code === 'insulation_type' ? 160 : 90), 160);
   panel.querySelector('.catalog-spec-table').style.setProperty('--catalog-spec-min-width',minWidth+'px');
   panel.querySelector('#catalog-spec-headers').innerHTML =
+    (showVariant ? '<th scope="col">Исполнение</th>' : '')+
     '<th scope="col">Материал</th><th scope="col">Номинал</th>'+visible.map(code=>
       '<th scope="col" title="'+esc(catalogueParameters[code] || columns.get(code))+'">'+esc(columns.get(code))+'</th>').join('');
   const body = panel.querySelector('#catalog-spec-values');
-  const rows = [...byVariant.values()].sort((a,b)=>String(a.material).localeCompare(String(b.material)) || a.rating-b.rating);
+  const rows = [...byVariant.values()].sort((a,b)=>String(a.variant || '').localeCompare(String(b.variant || '')) || String(a.material).localeCompare(String(b.material)) || a.rating-b.rating);
   panel.querySelector('.catalog-spec-legend').hidden = !rows.some(row=>visible.some(code=>
     row.specs.get(code)?.some(item=>pendingStatuses.has(String(item.status).toLowerCase()))));
   body.innerHTML = rows.map(row => {
@@ -195,10 +205,10 @@ function renderCatalogueSpecsRows(panel, specs, columns, preferredRating) {
           esc(field === 'status' ? statusLabels.get(value) || value : value))+'</div>');
       return '<td class="catalog-spec-service">'+(texts.join('') || '—')+'</td>';
     });
-    return '<tr><td>'+esc(row.material)+'</td><th scope="row">'+
+    return '<tr>'+(showVariant ? '<td>'+esc(row.variant?.toUpperCase() || '—')+'</td>' : '')+'<td>'+esc(row.material)+'</td><th scope="row">'+
       esc(row.rating == null ? '—' : row.rating+' А')+notes.map(note=>'<small>'+esc(note)+'</small>').join('')+
       '</th>'+cells.join('')+'</tr>';
-  }).join('') || '<tr><td colspan="'+(visible.length+2)+'">По выбранным фильтрам данных нет.</td></tr>';
+  }).join('') || '<tr><td colspan="'+(visible.length+(showVariant ? 3 : 2))+'">По выбранным фильтрам данных нет.</td></tr>';
 }
 
 function showCatalogueSpecs(button, filters = {}) {
@@ -441,7 +451,7 @@ function renderCharacteristics() {
     return '<tr data-index="' + index + '" data-state="' + esc(row.state) + '">' +
       '<td><input type="checkbox" aria-label="Выбрать ' + esc(label) + '"' +
       (row.state === 'new' ? ' checked' : '') + (['missing','conflict','same'].includes(row.state) ? ' disabled' : '') + '></td>' +
-      '<td>' + esc(row.material) + ' · ' + esc(row.rating_a) + ' А</td><td>' + esc(label) + '</td>' +
+      '<td>' + (row.rcp_variant ? esc(row.rcp_variant.toUpperCase()) + ' · ' : '') + esc(row.material) + ' · ' + esc(row.rating_a) + ' А</td><td>' + esc(label) + '</td>' +
       '<td><input type="text" class="characteristics-value" inputmode="' + (textual ? 'text' : 'decimal') + '" maxlength="' + (textual ? '140' : '20') + '" aria-label="' +
       esc(label + ' · ' + row.material + ' ' + row.rating_a + ' А') + '" value="' +
       esc(shown(row.value)) + '"' + (locked ? ' readonly' : '') + '> ' + esc(row.unit) + current + '</td>' +
